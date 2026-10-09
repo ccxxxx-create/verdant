@@ -107,7 +107,7 @@ export const UnitArchetype = z.object({
 
 ### 1.5 通信与状态
 
-- `EventBus`：全局 `Phaser.Events.EventEmitter` 单例，跨场景/跨系统解耦（`economy:changed`、`wave:flag`、`entity:spawned`…）。
+- `EventBus`：全局 typed emitter 单例（自实现、零引擎依赖，node 测试可跑——M0 解耦决策；Phaser.EventEmitter 薄包装 M1 评估），跨场景/跨系统解耦（`economy:changed`、`wave:flag`、`entity:spawned`…）。
 - `GameStore`：存档/设置/进度（≈80 行 typed reactive），localStorage 持久化。
 - `GameState`：局内单例（光露数、波次计数、暂停），只活在对局中。
 - 实体间禁止直接引用；交互一律走事件或 `GridQuery` 查询。

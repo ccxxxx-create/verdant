@@ -1,32 +1,25 @@
+import tokensJson from './tokens.json';
+
 /**
  * UI 设计 Token（GDD §10.2 的代码镜像，唯一事实源）。
- * 菜单/界面实现只允许引用本文件，不允许散落 hex。
+ * 调色板与 gen-assets.mjs 共享同一份 tokens.json（防资产/UI 色差）。
+ * Menu/界面实现只允许引用本文件，不允许散落 hex。
+ *
+ * 注意：Phaser 的 TextStyle 必须吃分离字段（fontFamily/fontSize/fontStyle），
+ * 不能把 "700 40px ..." 简写塞进 fontFamily——Phaser 会与默认 fontSize 拼出
+ * 非法 CSS font 串，导致 canvas 回退 10px sans-serif（M0 审查 P0，勿回退）。
  */
 
-export const palette = {
-  primary: '#5E8B7E', // 雾青：主按钮
-  primaryDeep: '#3E6156', // 雾青深：按下态/标题描边
-  accent: '#F2C14E', // 晨金：资源/高亮
-  bgBase: '#F4F1EA', // 雾白：界面底
-  bgDeep: '#23272B', // 墨：文字/深色面板
-  moss: '#6FA86B', // 草绿：草原世界
-  reef: '#3E7C8C', // 水青：深海世界
-  sky: '#7FA8D8', // 云蓝：浮岛世界
-  frost: '#A8D8E8', // 冰蓝：冰原世界
-} as const;
+export const palette = tokensJson.palette;
+export const worldPalette = tokensJson.worldPalette;
 
-export const worldPalette = {
-  meadow: palette.moss,
-  reef: palette.reef,
-  sky: palette.sky,
-  frost: palette.frost,
-} as const;
+const FONT_STACK = 'system-ui, "PingFang SC", "Noto Sans SC", sans-serif';
 
 export const typography = {
-  display: '700 40px system-ui, "PingFang SC", "Noto Sans SC", sans-serif',
-  heading: '700 20px system-ui, "PingFang SC", "Noto Sans SC", sans-serif',
-  body: '400 16px system-ui, "PingFang SC", "Noto Sans SC", sans-serif',
-  caption: '400 12px system-ui, "PingFang SC", "Noto Sans SC", sans-serif',
+  display: { fontFamily: FONT_STACK, fontSize: '40px', fontStyle: 'bold' },
+  heading: { fontFamily: FONT_STACK, fontSize: '20px', fontStyle: 'bold' },
+  body: { fontFamily: FONT_STACK, fontSize: '16px', fontStyle: '' },
+  caption: { fontFamily: FONT_STACK, fontSize: '12px', fontStyle: '' },
 } as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;

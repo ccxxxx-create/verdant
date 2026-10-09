@@ -35,10 +35,10 @@ git 仓库 + GitHub public 仓库 `verdant` + Vite/Phaser/TS 骨架；Boot（程
 | M0-4 | ✅ 完成 | MenuScene「雾岬」：雾带×3/露珠徽记/VERDANT/四世界路线图/主按钮+hint |
 | M0-5 | ✅ 完成 | zod unit/save schema+v1→v2→v3 迁移链；save 解耦 Phaser 依赖（node 可测） |
 | M0-6 | ✅ 完成 | 三绿：tsc 0 错 / vitest 14 过 / build 536ms（chunk 1.3MB=gzip349KB，M2 评估分包） |
-| M0-7 | in_progress | |
-| M0-8 | pending | |
-| M0-9 | pending | |
-| M0-10 | pending | |
+| M0-7 | ✅ 完成 | 仓库 ccxxxx-create/verdant（PUBLIC）+2 次提交推送；令牌直连绕过本机 gh-proxy 改写 |
+| M0-8 | ✅ 完成 | Pages=workflow 源已启用；workflow 重跑 success；URL 三连 200（index/JS/SVG）（2026-10-09） |
+| M0-9 | ✅ 完成 | 独立视觉评审过审（7/10）：P0 无；P1 按钮对比度已加深至雾青深（6.9:1）。渲染验证：1920×1080/1280×800 双端 0 console 错误；hover 金边+点击 hint 目验通过（2026-10-09） |
+| M0-10 | ✅ 完成 | 独立代码审查 P0（Phaser 字体 API 误用致全部文字 10px）已修复：typography 拆分离字段；registry 测试补齐进 CI；bus 改零引擎依赖实现；token 单一事实源 tokens.json；补 MIT LICENSE；雾带 1920 全覆盖。三绿复跑：tsc 0 错/32 测试/构建 532ms。重渲染截图验证字号层级恢复（2026-10-09） |
 
 ## 5. 留痕裁决表
 
@@ -49,6 +49,10 @@ git 仓库 + GitHub public 仓库 `verdant` + Vite/Phaser/TS 骨架；Boot（程
 | M0-D3 | 暂不建 eslint/prettier/husky 等工程设施 | 单人+AI，tsc+vitest 已足够 | 后期风格漂移，成本低 |
 | M0-D4 | 视觉评审用 browser-use 本地起服务截图 | 环境无系统 Playwright | 无 |
 | M0-D5 | 菜单文案用占位标题 VERDANT（游戏名未定） | 用户"先不设置" | 定名后改一处常量 |
+| M0-D6 | typography token 拆为 fontFamily/fontSize/fontStyle 分离字段（禁 font 简写） | M0 审查 P0：Phaser 把简写与默认 fontSize 拼成非法 CSS font 串→全部文字回退 10px | 无（已修复并测试） |
+| M0-D7 | EventBus 改自实现 typed emitter（零 Phaser 依赖） | 核心逻辑 node 测试可跑（DEV-PLAN §4）；Phaser.EventEmitter 包装留 M1 评估 | 与 DEV-PLAN §1.5 原文有偏差，已同步文档 |
+| M0-D8 | 主按钮常态色改雾青深 #3E6156（白字 6.9:1） | 视觉评审 P1：原雾青底白字 3.8:1 低于 4.5:1 小字硬指标 | 无 |
+| M0-D9 | LICENSE=MIT 已落盘 | DEV-PLAN M0 建仓时终定项 | 无 |
 
 ## 6. 验收标准
 
