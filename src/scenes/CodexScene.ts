@@ -49,6 +49,7 @@ export class CodexScene extends Phaser.Scene {
   private scrollY = 0;
   private scrollMax = 0;
   private content?: Phaser.GameObjects.Container;
+  private scrollMaskShape?: Phaser.GameObjects.Graphics;
   private tabChips: Phaser.GameObjects.Container[] = [];
 
   constructor() {
@@ -70,9 +71,13 @@ export class CodexScene extends Phaser.Scene {
 
   // —— 背景（签名雾带降透明度复用） ——
   private drawBackdrop(width: number): void {
-    const band = this.add.image(width / 2, 200, 'band_fog').setAlpha(0.22).setScale(0.8, 0.6);
-    band.x = width / 2 + 60;
-    this.tweens.add({ targets: band, x: width / 2 - 60, duration: 14000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const g = this.add.graphics();
+    for (let x = 40; x < width; x += 80) {
+      for (let y = 40; y < 1040; y += 80) {
+        g.fillStyle(0x1e4a3b, 1);
+        g.fillRect(x, y, 4, 4);
+      }
+    }
   }
 
   private drawHeader(width: number): void {
@@ -135,6 +140,7 @@ export class CodexScene extends Phaser.Scene {
 
   // —— 内容渲染（按 tab） ——
   private renderTab(width: number): void {
+    this.scrollMaskShape?.destroy();
     this.content?.destroy(true);
     this.scrollY = 0;
     const content = this.add.container(0, 0);
@@ -158,6 +164,7 @@ export class CodexScene extends Phaser.Scene {
   private maskShape(): Phaser.Display.Masks.GeometryMask {
     const g = this.make.graphics({ x: 0, y: 0 }, false);
     g.fillRect(0, 224, this.scale.gameSize.width, 800);
+    this.scrollMaskShape = g;
     return g.createGeometryMask();
   }
 
@@ -176,7 +183,7 @@ export class CodexScene extends Phaser.Scene {
       content.add(card);
     });
     const rows = Math.ceil(registry.units.length / cols);
-    this.setupScroll(content, rows * (CARD_H + gapY) - gapY);
+    this.setupScroll(content, Math.max(0, rows * (CARD_H + gapY) - gapY - 800 + 60));
   }
 
   private renderEnemyGrid(content: Phaser.GameObjects.Container, width: number): void {

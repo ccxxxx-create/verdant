@@ -2,12 +2,16 @@ import type { PixelSprite } from '../palette.ts';
 
 /**
  * 草原战斗场景像素背景（320×180 逻辑网格，运行时 ×6 放大到 1920×1080）。
- * 代码生成+确定性种子：天空带/太阳/树线/雾(抖动)/六车道草带/草屑散布/左侧栅栏。
- * 场景统一走像素体系（用户裁定：所有内容全像素）。
+ * 几何与战斗网格单一事实源：HUD 高 132px（bg 22 行），游戏区 y150–1040（bg 25–173）。
+ * 六车道刈纹带与 BattleScene 的 6 行车道逐一对齐（每车道 bg≈24.7 行）。
+ * 代码生成+确定性种子：天空带/太阳/树线/雾抖动/六车道刈纹/草屑散布/左侧栅栏。
  */
 
 const W = 320;
 const H = 180;
+/** 战斗网格参数（与 BattleScene 保持一致：GRID_Y0=150, ROW_H=148.33, GRID_X0=150） */
+const GRID_TOP_BG = 25; // 150 / 6
+const LANE_H_BG = (1040 - 150) / 6 / 6; // ≈ 24.72
 
 const grid: string[][] = Array.from({ length: H }, () => Array.from({ length: W }, () => '.'));
 
@@ -28,23 +32,22 @@ function mulberry(seed: number): () => number {
   };
 }
 
-/** 天空带色（上深下浅，地平线最亮） */
+/** 天空带色（上深下浅，仅 HUD 后 22 行可见，故收敛为深→中） */
 const SKY: [number, string][] = [
-  [26, 'q'],
-  [40, 'g'],
-  [54, 'L'],
-  [62, 'h'],
+  [10, 'q'],
+  [8, 'g'],
+  [7, 'L'],
 ];
 
 /** 树线高度函数（确定性；右侧密左侧疏） */
 function treeLine(x: number): number {
   const t = (x * 2654435761) % 100;
-  const base = x > 220 ? 26 : x > 120 ? 16 : 8;
-  return base + Math.floor(t / 12);
+  const base = x > 220 ? 20 : x > 120 ? 12 : 5;
+  return base + Math.floor(t / 14);
 }
 
 export function meadowBattleBg(): PixelSprite {
-  // 1. 天空
+  // 1. 天空（HUD 后：深青→雾青）
   let y = 0;
   for (const [rows, ch] of SKY) {
     for (let i = 0; i < rows && y < H; i++, y++) {
@@ -52,68 +55,72 @@ export function meadowBattleBg(): PixelSprite {
     }
   }
 
-  // 2. 太阳（右侧 = 敌人来向）
-  const sunX = 268;
-  const sunY = 58;
-  const sunR = 13;
+  // 2. 太阳（右侧，半悬地平线）
+  const sunX = 262;
+  const sunY = 17;
+  const sunR = 11;
   for (let yy = -sunR; yy <= sunR; yy++) {
     for (let xx = -sunR; xx <= sunR; xx++) {
       if (xx * xx + yy * yy <= sunR * sunR) {
-        set(sunY + yy, sunX + xx, xx * xx + yy * yy <= (sunR * 0.45) ** 2 ? 'W' : 'G');
+        set(sunY + yy, sunX + xx, xx * xx + yy * yy <= (sunR * 0.4) ** 2 ? 'W' : 'G');
       }
     }
   }
 
-  // 3. 树线（地平线上的剪影，底部深绿过渡）
+  // 3. 树线（贴游戏区顶：bg y25 附近）
+  const horizon = GRID_TOP_BG;
   for (let x = 0; x < W; x++) {
     const h = treeLine(x);
-    for (let i = 0; i < h; i++) set(86 - i, x, 'K');
-    set(85, x, 'd');
-    set(86, x, 'q');
-    set(87, x, 'M');
+    for (let i = 0; i < h; i++) set(horizon - 1 - i, x, 'K');
+    set(horizon - 1, x, 'd');
   }
 
-  // 4. 雾（像素抖动半透明：低密度，柔化地平线）
+  // 4. 雾（地平线上两带，低密度抖动）
   for (let x = 0; x < W; x++) {
-    for (let py = 80; py < 88; py++) if ((x + py) % 3 === 0) set(py, x, 'W');
-    for (let py = 74; py < 79; py++) if ((x * 3 + py) % 6 === 0) set(py, x, 'i');
+    for (let py = horizon - 4; py < horizon; py++) if ((x + py) % 3 === 0) set(py, x, 'W');
+    for (let py = horizon - 8; py < horizon - 4; py++) if ((x * 3 + py) % 6 === 0) set(py, x, 'i');
   }
 
-  // 5. 地面 + 六车道刈纹
-  for (let py = 87; py < H; py++) {
+  // 5. 地面 + 六车道刈纹（与游戏 6 行逐一对齐）
+  for (let py = horizon; py < H; py++) {
     for (let x = 0; x < W; x++) set(py, x, 'M');
   }
-  const laneH = 15;
   for (let lane = 0; lane < 6; lane++) {
-    const y0 = 88 + lane * laneH;
-    for (let py = y0; py < y0 + laneH && py < H; py++) {
+    const y0 = Math.round(horizon + lane * LANE_H_BG);
+    const y1 = Math.round(horizon + (lane + 1) * LANE_H_BG);
+    for (let py = y0; py < y1 && py < H; py++) {
       const mid = py - y0;
-      for (let x = 0; x < W; x++) set(py, x, mid >= 3 && mid < laneH - 3 ? 'L' : 'M');
+      const hgt = y1 - y0;
+      for (let x = 0; x < W; x++) set(py, x, mid >= 3 && mid < hgt - 3 ? 'L' : 'M');
     }
   }
 
   // 6. 草屑与小花
   const rnd = mulberry(20261009);
-  for (let i = 0; i < 900; i++) {
+  for (let i = 0; i < 700; i++) {
     const x = Math.floor(rnd() * W);
-    const py = 88 + Math.floor(rnd() * (H - 88));
+    const py = horizon + Math.floor(rnd() * (H - horizon));
     const cur = grid[py]?.[x];
     if (cur === 'L' || cur === 'M') set(py, x, rnd() < 0.72 ? 'h' : 'd');
   }
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 20; i++) {
     const x = 6 + Math.floor(rnd() * (W - 12));
-    const py = 90 + Math.floor(rnd() * (H - 94));
+    const py = horizon + 4 + Math.floor(rnd() * (H - horizon - 6));
     set(py, x, rnd() < 0.5 ? 'G' : 'W');
   }
 
-  // 7. 左侧木栅栏（玩家侧地标）
-  for (let px = 10; px <= 34; px += 8) {
-    for (let py = 96; py <= 110; py++) set(py, px, 'N');
-    set(97, px, 'n');
-    set(109, px, 'K');
-  }
-  for (const py of [98, 99, 107, 108]) {
-    for (let px = 8; px <= 40; px++) if (grid[py]?.[px] === '.') set(py, px, 'n');
+  // 7. 左侧木栅栏（竖立于车道带左侧，先画立柱再画横杆）
+  for (let lane = 0; lane < 6; lane++) {
+    const y0 = Math.round(horizon + lane * LANE_H_BG);
+    const y1 = Math.round(horizon + (lane + 1) * LANE_H_BG);
+    for (const px of [12, 26]) {
+      for (let py = y0 + 2; py < y1 - 2 && py < H; py++) set(py, px, 'N');
+      set(y0 + 3, px, 'n');
+      set(y1 - 3, px, 'K');
+    }
+    for (const py of [y0 + 5, y1 - 6]) {
+      for (let px = 10; px <= 30; px++) set(py, px, 'n');
+    }
   }
 
   return grid.map((row) => row.join(''));

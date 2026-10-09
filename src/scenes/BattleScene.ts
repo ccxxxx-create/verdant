@@ -2,12 +2,14 @@ import Phaser from 'phaser';
 import type { EnemyArchetype, UnitArchetype } from '../core/schema/unit.ts';
 import type { LevelDef } from '../core/schema/level.ts';
 import { registryFrom } from '../core/registry.ts';
+import { readSave, writeSave } from '../core/save.ts';
 import { Rng } from '../core/rng.ts';
 import { allEnemies, allUnits } from '../data/archetypes/index.ts';
 import { meadowBattleBg } from '../data/pixels/bg/meadow.ts';
 import type { PixelSprite } from '../data/pixels/palette.ts';
 import { unitSprites } from '../data/pixels/units/meadow.ts';
 import { enemySprites, projectileSprites } from '../data/pixels/enemies/meadow.ts';
+import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
 import { palette, typography } from '../ui/tokens.ts';
 
@@ -67,7 +69,11 @@ const ELEMENT_BULLET: Record<string, string> = {
 /** 烘焙全部像素纹理（图鉴/战斗共用；幂等）。 */
 export function ensurePixelTextures(scene: Phaser.Scene): void {
   for (const u of allUnits) bakePixelTexture(scene, `unit_${u.id}`, (unitSprites[u.id] ?? unitSprites.trifold_arrow) as PixelSprite, 3);
-  for (const e of allEnemies) bakePixelTexture(scene, `enemy_${e.id}`, (enemySprites[e.id] ?? enemySprites.march_ant) as PixelSprite, 5);
+  for (const e of allEnemies) {
+    const isBoss = e.id === 'stone_hide_giant';
+    bakePixelTexture(scene, `enemy_${e.id}`, (enemySprites[e.id] ?? enemySprites.march_ant) as PixelSprite, isBoss ? 4 : 5);
+  }
+  for (const [name, sprite] of Object.entries(pixelIcons)) bakePixelTexture(scene, `icon_${name}`, sprite, 4);
   bakePixelTexture(scene, 'bg_meadow', meadowBattleBg(), 6);
 }
 
@@ -108,7 +114,7 @@ export class BattleScene extends Phaser.Scene {
   create(): void {
     const injected = this.registry.get('level') as LevelDef | undefined;
     if (injected) this.level = injected;
-    this.lightdew = this.level.startingLight;
+    this.resetState();
     ensurePixelTextures(this);
 
     this.add.image(960, 540, 'bg_meadow').setDisplaySize(1920, 1080);
@@ -120,6 +126,29 @@ export class BattleScene extends Phaser.Scene {
     this.bannerText('准备布防…', 1.2);
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onPointer(p));
     this.input.keyboard?.on('keydown-SPACE', () => this.toggleSpeed());
+  }
+
+  /** 场景重启时重置全部可变状态（防二次进入冻结，审查 P0）。 */
+  private resetState(): void {
+    this.units = [];
+    this.enemies = [];
+    this.projectiles = [];
+    this.drops = [];
+    this.spawnQueue = [];
+    this.cooldownEnd.clear();
+    this.lightdew = this.level.startingLight;
+    this.wave = 0;
+    this.waveTimer = 8;
+    this.inWave = false;
+    this.spawnTimer = 0;
+    this.dropTimer = 6;
+    this.speed = 1;
+    this.state = 'playing';
+    this.selected = undefined;
+    this.now = 0;
+    this.banner?.destroy();
+    this.banner = undefined;
+    this.tweens.timeScale = 1;
   }
 
   private fallbackLevel(): LevelDef {
@@ -208,7 +237,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawCards(): void {
-    const deckIds = ['firefly_reed', 'thorn_pea', 'frost_pea', 'ember_fluff', 'wood_core', 'tether_moss'];
+    const defaultDeck = ['firefly_reed', 'thorn_pea', 'frost_pea', 'ember_fluff', 'wood_core', 'tether_moss'];
+    const deckIds = this.level.unlockUnits.length > 0 ? this.level.unlockUnits : defaultDeck;
     const deck = deckIds.map((id) => this.archetypes.unitById.get(id)).filter((u): u is UnitArchetype => !!u);
     this.cardLayer = this.add.container(0, 0);
     deck.forEach((u, i) => {
@@ -255,7 +285,7 @@ export class BattleScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (this.state !== 'playing') return;
     const dt = (delta / 1000) * this.speed;
-    this.now += delta; // 冷却/计时按真实毫秒（不受倍速影响的卡片冷却手感更稳）
+    this.now += delta * this.speed; // 统一时基：倍速下所有计时同步（审查 P0）
 
     this.updateDrops(dt);
     this.updateWaves(dt);
@@ -333,7 +363,7 @@ export class BattleScene extends Phaser.Scene {
     const def = this.archetypes.enemyById.get(id);
     if (!def) return;
     const row = this.rng.int(0, ROWS);
-    const img = this.add.image(1900, this.cellY(row), `enemy_${id}`);
+    const img = this.add.image(1880, this.cellY(row) + 28, `enemy_${id}`);
     this.enemies.push({ def, row, hp: def.hp, x: 1900, img, slowUntil: 0, burnUntil: 0, flashUntil: 0 });
   }
 
@@ -357,7 +387,7 @@ export class BattleScene extends Phaser.Scene {
       this.squash(u.img);
       const el = a.element ?? 'none';
       const key = ELEMENT_BULLET[el] ?? 'bullet_pea';
-      const img = this.add.image(u.img.x + 30, u.img.y - 10, key);
+      const img = this.add.image(u.img.x + 30, u.img.y - 30, key);
       this.projectiles.push({
         img,
         x: img.x,
@@ -452,6 +482,7 @@ export class BattleScene extends Phaser.Scene {
         this.floatText(d.x, d.img.y - 20, '+25', '#F2C14E');
         d.img.destroy();
         this.drops.splice(i, 1);
+        break;
       }
     }
     if (p.rightButtonDown()) {
@@ -469,12 +500,16 @@ export class BattleScene extends Phaser.Scene {
       this.flashBanner('光露不足', 0.8);
       return;
     }
+    if (this.now < (this.cooldownEnd.get(def.id) ?? 0)) {
+      this.flashBanner(`${def.name}冷却中`, 0.7);
+      return;
+    }
     this.plant(def, row, col);
   }
 
   private plant(def: UnitArchetype, row: number, col: number): void {
     this.lightdew -= def.cost;
-    const img = this.add.image(this.cellX(col), this.cellY(row), `unit_${def.id}`);
+    const img = this.add.image(this.cellX(col), this.cellY(row) + 26, `unit_${def.id}`);
     this.units.push({ def, row, col, hp: def.hp, img, lastShot: this.now });
     this.cooldownEnd.set(def.id, this.now + def.cooldownMs);
     this.squash(img, 1.15);
@@ -484,6 +519,12 @@ export class BattleScene extends Phaser.Scene {
   private removeUnit(u: UnitInst, byDeath: boolean): void {
     const idx = this.units.indexOf(u);
     if (idx >= 0) this.units.splice(idx, 1);
+    for (const e of this.enemies) {
+      if (e.biteTarget === u) {
+        e.biteTarget = undefined;
+        e.x = e.img.x; // 逻辑位置回同步（防瞬移回跳）
+      }
+    }
     if (byDeath) this.debris(u.img.x, u.img.y, 'M', 8);
     u.img.destroy();
   }
@@ -573,8 +614,28 @@ export class BattleScene extends Phaser.Scene {
 
   private winLevel(): void {
     this.state = 'won';
+    this.persistProgress(3);
     this.bannerText('胜利！晨雾草原守住了', 2);
     this.time.delayedCall(2200, () => this.scene.start('Menu'));
+  }
+
+  /** 通关写档：clearedLevels/stars/unlockedUnits（localStorage）。 */
+  private persistProgress(stars: number): void {
+    try {
+      const save = readSave(window.localStorage);
+      if (!save.progress.clearedLevels.includes(this.level.id)) {
+        save.progress.clearedLevels.push(this.level.id);
+      }
+      save.progress.stars[this.level.id] = Math.max(save.progress.stars[this.level.id] ?? 0, stars);
+      for (const id of this.level.unlockUnits) {
+        if (!save.progress.unlockedUnits.includes(id)) save.progress.unlockedUnits.push(id);
+      }
+      save.stats.wins += 1;
+      writeSave(window.localStorage, save);
+      this.registry.set('save', save);
+    } catch (err) {
+      console.error('[save] persist failed', err);
+    }
   }
 
   private loseLevel(): void {

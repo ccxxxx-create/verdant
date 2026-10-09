@@ -15,7 +15,7 @@ const REPO = 'ccxxxx-create/verdant';
 const BRANCH = 'main';
 const TOKEN = execSync('gh auth token', { encoding: 'utf8' }).trim();
 
-const SKIP_TOP = new Set(['.git', 'node_modules', 'dist', '.vite', '.mimosa']);
+const SKIP_TOP = new Set(['.git', 'node_modules', 'dist', '.vite', '.mimosa', 'coverage', '.DS_Store']);
 const SKIP_PREFIX = ['docs/_review/'];
 
 function walk(dir, out = [], rel = '') {
