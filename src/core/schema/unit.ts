@@ -6,10 +6,19 @@ export const UnitArchetype = z.strictObject({
   world: z.enum(['meadow', 'reef', 'sky', 'frost']),
   role: z.enum(['producer', 'attacker', 'defender', 'support']),
   name: z.string().min(1),
+  /** 图鉴特色介绍（GDD §14.2，必填一句话 ≤30 字） */
+  flavor: z.string().min(1).max(60),
   cost: z.number().int().positive(),
   cooldownMs: z.number().int().positive(),
   hp: z.number().int().positive(),
   behaviors: z.array(z.string()).min(1),
+  /** 世界能量大招配置（GDD §13.1；缺省=generic 强化） */
+  power: z
+    .object({
+      kind: z.enum(['generic', 'produce_burst', 'multi_shot', 'instant_trigger', 'stun_lane']),
+      params: z.record(z.string(), z.number()).default({}),
+    })
+    .optional(),
   attack: z
     .object({
       damage: z.number().positive(),
@@ -44,6 +53,8 @@ export const EnemyArchetype = z.strictObject({
   id: z.string().regex(/^[a-z0-9_]+$/),
   world: z.enum(['meadow', 'reef', 'sky', 'frost']),
   name: z.string().min(1),
+  /** 图鉴特色介绍（GDD §14.3，必填一句话 ≤30 字） */
+  flavor: z.string().min(1).max(60),
   hp: z.number().int().positive(),
   /** 格/秒（1.0 = 基准）。 */
   speed: z.number().positive(),

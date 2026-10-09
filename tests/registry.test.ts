@@ -48,7 +48,7 @@ describe('registry validation (CI gate, DEV-PLAN §4)', () => {
 
   it('registryFrom maps round-trip', () => {
     const reg = registryFrom(allUnits, allEnemies);
-    expect(reg.unitById.get('thorn_pea')?.name).toBe('刺豆');
+    expect(reg.unitById.get('thorn_pea')?.name).toBe('豆射手');
     expect(reg.enemyById.size).toBe(allEnemies.length);
     expect(reg.units).toHaveLength(13);
   });
