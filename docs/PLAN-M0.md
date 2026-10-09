@@ -53,6 +53,9 @@ git 仓库 + GitHub public 仓库 `verdant` + Vite/Phaser/TS 骨架；Boot（程
 | M0-D7 | EventBus 改自实现 typed emitter（零 Phaser 依赖） | 核心逻辑 node 测试可跑（DEV-PLAN §4）；Phaser.EventEmitter 包装留 M1 评估 | 与 DEV-PLAN §1.5 原文有偏差，已同步文档 |
 | M0-D8 | 主按钮常态色改雾青深 #3E6156（白字 6.9:1） | 视觉评审 P1：原雾青底白字 3.8:1 低于 4.5:1 小字硬指标 | 无 |
 | M0-D9 | LICENSE=MIT 已落盘 | DEV-PLAN M0 建仓时终定项 | 无 |
+| M0-D10 | git 推送改走 GitHub API 通道（scripts/api-push.mjs）：本机 git 全局 insteadOf 把 github.com 改写为 gh-proxy 镜像，直连 github.com:443 超时、镜像拒绝带令牌推送 | 实证：API 命令 3 次推送均 success、CI 部署 success | 本地/远端 commit 历史分叉（内容树一致）；恢复网络后可直接 git pull --rebase 对齐 |
+| M0-D11 | API 推送脚本 walker 曾误传 .mimosa/ 与 docs/_review/（嵌套路径未进跳过表），已第二次提交删除（deleted: 8）并修复脚本 | 远端干净复验：contents/.mimosa=404、部署页无残留 | 无（已清理并复验） |
+| M0-D12 | 视觉评审发现的按钮对比度 P1 以加深常态色解决（#5E8B7E→#3E6156，6.9:1）；未重派视觉复审（改动单调增、低风险），已重渲染自验 | 硬指标优先 | 极小 |
 
 ## 6. 验收标准
 
