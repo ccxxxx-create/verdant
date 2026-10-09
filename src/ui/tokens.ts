@@ -38,3 +38,13 @@ export function withAlpha(hex: string, alpha: number): string {
     .padStart(2, '0');
   return `${hex}${a}`;
 }
+
+/**
+ * 6 位 hex → Phaser Graphics 颜色整数。
+ * 注意：Phaser 的 Graphics.fillStyle/lineStyle 必须用具名 alpha 参数，
+ * 不能传 8 位 hex（Phaser 只解析 #RRGGBB，alpha 会丢失成不透明）。
+ * withAlpha 只用于 Text/Canvas fillStyle（CSS 色，支持 8 位）。
+ */
+export function hexToInt(hex: string): number {
+  return parseInt(hex.replace('#', ''), 16);
+}

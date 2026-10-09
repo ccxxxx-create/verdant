@@ -1,0 +1,19 @@
+{
+  "id": "meadow-1-1",
+  "world": "meadow",
+  "template": "teach",
+  "rows": 6,
+  "cols": 9,
+  "terrain": {
+    "waterColumns": [],
+    "brokenCells": [],
+    "iceColumns": [],
+    "wind": "none"
+  },
+  "waves": 10,
+  "pool": ["march_ant"],
+  "unlockUnits": ["firefly_reed", "thorn_pea"],
+  "starCondition": "none",
+  "startingLight": 75,
+  "plantFood": true
+}

@@ -7,6 +7,7 @@ describe('UnitArchetype schema', () => {
     world: 'meadow',
     role: 'attacker',
     name: '刺豆',
+    flavor: '最可靠的直线射手，一发 20 点，开路先锋',
     cost: 100,
     cooldownMs: 5000,
     hp: 300,
@@ -41,7 +42,7 @@ describe('enemyPoints formula (GDD §8.2)', () => {
 
   it('boss traits contribute bonus but bosses bypass pool check', () => {
     expect(EnemyArchetype.parse({
-      id: 'x', world: 'meadow', name: 'X', hp: 5000, speed: 0.3, biteDps: 20,
+      id: 'x', world: 'meadow', name: 'X', flavor: '测试用 Boss', hp: 5000, speed: 0.3, biteDps: 20,
       armor: 'shell', traits: ['summon'], isBoss: true, points: 0,
     }).isBoss).toBe(true);
   });

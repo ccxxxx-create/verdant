@@ -1,0 +1,18 @@
+{
+  "id": "meadow-4-1",
+  "world": "meadow",
+  "template": "conveyor",
+  "rows": 6,
+  "cols": 9,
+  "waves": 20,
+  "pool": ["march_ant", "grey_tide_swarm", "iron_beak_sparrow"],
+  "unlockUnits": [],
+  "starCondition": "deck_le6",
+  "startingLight": 0,
+  "plantFood": true,
+  "conveyor": {
+    "intervalMs": 5000,
+    "handLimit": 5,
+    "pool": ["firefly_reed", "thorn_pea", "frost_pea", "wood_core", "ember_fluff", "drum_cap", "tether_moss", "nectar_moss"]
+  }
+}

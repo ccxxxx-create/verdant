@@ -1,0 +1,43 @@
+import { describe, expect, it } from 'vitest';
+import { PALETTE } from '../src/data/pixels/palette.ts';
+import { allUnitSprites, allEnemySprites, allProjectileSprites, allPixelIcons, validatePixelSprite } from '../src/data/pixels/index.ts';
+import { meadowBattleBg } from '../src/data/pixels/bg/meadow.ts';
+
+const keys = new Set(Object.keys(PALETTE));
+
+describe('pixel sprite data integrity', () => {
+  it('all 13 unit sprites are rectangular & in-palette', () => {
+    const names = Object.keys(allUnitSprites);
+    expect(names).toHaveLength(13);
+    for (const [name, sprite] of Object.entries(allUnitSprites)) {
+      expect(validatePixelSprite(name, sprite, keys)).toEqual([]);
+    }
+  });
+
+  it('all 11 enemy sprites + 4 projectiles + 16 icons are valid', () => {
+    expect(Object.keys(allEnemySprites)).toHaveLength(11);
+    expect(Object.keys(allProjectileSprites)).toHaveLength(4);
+    expect(Object.keys(allPixelIcons)).toHaveLength(16);
+    const tables = { ...allEnemySprites, ...allProjectileSprites, ...allPixelIcons };
+    for (const [name, sprite] of Object.entries(tables)) {
+      expect(validatePixelSprite(name, sprite, keys)).toEqual([]);
+    }
+  });
+
+  it('sprite ids match archetype registry ids', async () => {
+    const { allUnits, allEnemies } = await import('../src/data/archetypes/index.ts');
+    for (const u of allUnits) expect(allUnitSprites[u.id], `unit ${u.id}`).toBeDefined();
+    for (const e of allEnemies) expect(allEnemySprites[e.id], `enemy ${e.id}`).toBeDefined();
+  });
+
+  it('battle bg generates deterministic 320x180 grid', () => {
+    const bg = meadowBattleBg();
+    expect(bg).toHaveLength(180);
+    for (const row of bg) expect(row).toHaveLength(320);
+    // 确定性：两次生成完全一致
+    expect(meadowBattleBg()).toEqual(bg);
+    // 内容 sanity：天空有色、地面是草色
+    expect(bg[10]?.[100]).not.toBe('.');
+    expect(bg[150]?.[160]).toMatch(/^[MLhd]$/);
+  });
+});
