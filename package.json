@@ -3,9 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Verdant（游戏名待定）— 自研 2D 车道式塔防。内部代号阶段。",
+  "description": "Verdant\uff08\u6e38\u620f\u540d\u5f85\u5b9a\uff09\u2014 \u81ea\u7814 2D \u8f66\u9053\u5f0f\u5854\u9632\u3002\u5185\u90e8\u4ee3\u53f7\u9636\u6bb5\u3002",
   "scripts": {
-    "assets": "node scripts/gen-assets.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",

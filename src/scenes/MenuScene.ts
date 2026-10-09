@@ -93,7 +93,7 @@ export class MenuScene extends Phaser.Scene {
     const save = this.save;
     const cleared = save ? save.progress.clearedLevels.length : 0;
     const totalLevels = 131;
-    const progress = Math.min(1, cleared / 32);
+    const progress = Math.min(1, cleared / totalLevels);
 
     const cw = 1100;
     const ch = 400;

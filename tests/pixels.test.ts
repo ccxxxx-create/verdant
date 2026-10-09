@@ -17,7 +17,9 @@ describe('pixel sprite data integrity', () => {
   it('all 11 enemy sprites + 4 projectiles + 16 icons are valid', () => {
     expect(Object.keys(allEnemySprites)).toHaveLength(11);
     expect(Object.keys(allProjectileSprites)).toHaveLength(4);
-    expect(Object.keys(allPixelIcons)).toHaveLength(16);
+    expect(Object.keys(allPixelIcons)).toHaveLength(17);
+    expect(allPixelIcons.lightdew).toBeDefined();
+    expect(PALETTE.x).toBeDefined(); // 铁甲深色（护甲四分层）
     const tables = { ...allEnemySprites, ...allProjectileSprites, ...allPixelIcons };
     for (const [name, sprite] of Object.entries(tables)) {
       expect(validatePixelSprite(name, sprite, keys)).toEqual([]);

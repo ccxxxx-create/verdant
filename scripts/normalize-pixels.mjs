@@ -11,23 +11,31 @@ import { pixelIcons } from '../src/data/pixels/icons.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-function toSize(sprite, w, h) {
-  const rows = sprite.map((row) => {
+function toSize(sprite, w, h, bottomAlign = false) {
+  // 修剪尾部空白行
+  let rows = [...sprite];
+  while (rows.length > 0 && rows[rows.length - 1].replace(/\./g, '').length === 0) rows.pop();
+  const blank = '.'.repeat(w);
+  if (bottomAlign) {
+    // 内容贴底：顶部补空白（修敌人漂浮）
+    while (rows.length < h) rows.unshift(blank);
+  } else {
+    while (rows.length < h) rows.push(blank);
+  }
+  return rows.slice(0, h).map((row) => {
     let r = row;
     while (r.length > w && r.endsWith('.')) r = r.slice(0, -1);
     while (r.length < w) r += '.';
     return r;
   });
-  const blank = '.'.repeat(w);
-  while (rows.length < h) rows.push(blank);
-  return rows.slice(0, h);
 }
 
 const units = Object.fromEntries(Object.entries(unitSprites).map(([k, v]) => [k, toSize(v, 32, 32)]));
 const enemies = Object.fromEntries(
   Object.entries(enemySprites).map(([k, v]) => {
+    if (k === 'stone_hide_giant') return [k, toSize(v, 32, 32, false)];
     const w = Math.max(...v.map((r) => r.replace(/\.+$/, '').length));
-    return [k, toSize(v, k === 'stone_hide_giant' ? 32 : w, k === 'stone_hide_giant' ? 32 : 24)];
+    return [k, toSize(v, w, 24, true)];
   }),
 );
 const projectiles = Object.fromEntries(Object.entries(projectileSprites).map(([k, v]) => [k, toSize(v, 8, 8)]));
