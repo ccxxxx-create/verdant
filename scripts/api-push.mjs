@@ -69,14 +69,12 @@ for (const p of local) {
   contents.set(rel, buf);
 }
 
-// 3. 差异集合（新增/修改/删除）
+// 3. 差异集合（新增/修改/删除）。删除=远端有、本地没有（本地跳过目录不进 localMap，自然成删除项）
 const changed = [];
 for (const [path, sha] of localMap) {
   if (remoteMap.get(path) !== sha) changed.push(path);
 }
-const deleted = [...remoteMap.keys()].filter(
-  (p) => !localMap.has(p) && !SKIP_TOP.has(p.split('/')[0]) && !SKIP_PREFIX.some((pre) => p.startsWith(pre)),
-);
+const deleted = [...remoteMap.keys()].filter((p) => !localMap.has(p));
 
 console.log(`changed: ${changed.length}, deleted: ${deleted.length}`);
 if (changed.length === 0 && deleted.length === 0) {
