@@ -1,0 +1,24 @@
+{
+  "name": "verdant",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Verdant（游戏名待定）— 自研 2D 车道式塔防。内部代号阶段。",
+  "scripts": {
+    "assets": "node scripts/gen-assets.mjs",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  }
+}
