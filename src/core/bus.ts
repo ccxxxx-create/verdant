@@ -1,35 +1,49 @@
-import Phaser from 'phaser';
+/**
+ * 全局事件总线（DEV-PLAN §1.5）：跨场景/跨系统解耦的唯一通道。
+ * 自实现 typed emitter、零引擎依赖——核心逻辑在 node 测试环境可跑（DEV-PLAN §4）。
+ * Phaser 的 EventEmitter 薄包装在 M1 评估是否保留。
+ */
 
 type Handler = (...args: never[]) => void;
 
-/**
- * 全局事件总线：跨场景/跨系统解耦的唯一通道（DEV-PLAN §1.5）。
- * 实体间禁止直接引用，交互一律走事件或 GridQuery 查询。
- */
 class TypedEventBus {
-  private readonly emitter = new Phaser.Events.EventEmitter();
+  private readonly handlers = new Map<string, Set<Handler>>();
 
-  on(event: string, fn: Handler, context?: unknown): this {
-    this.emitter.on(event, fn, context);
+  on(event: string, fn: Handler): this {
+    const set = this.handlers.get(event) ?? new Set<Handler>();
+    set.add(fn);
+    this.handlers.set(event, set);
     return this;
   }
 
-  once(event: string, fn: Handler, context?: unknown): this {
-    this.emitter.once(event, fn, context);
-    return this;
+  once(event: string, fn: Handler): this {
+    const wrapper: Handler = (...args: never[]) => {
+      this.off(event, wrapper);
+      fn(...args);
+    };
+    return this.on(event, wrapper);
   }
 
-  off(event: string, fn?: Handler, context?: unknown): this {
-    this.emitter.off(event, fn, context);
+  off(event: string, fn: Handler): this {
+    this.handlers.get(event)?.delete(fn);
     return this;
   }
 
   emit(event: string, ...args: unknown[]): boolean {
-    return this.emitter.emit(event, ...args);
+    const set = this.handlers.get(event);
+    if (!set || set.size === 0) return false;
+    for (const fn of [...set]) {
+      (fn as (...a: unknown[]) => void)(...args);
+    }
+    return true;
+  }
+
+  listenerCount(event: string): number {
+    return this.handlers.get(event)?.size ?? 0;
   }
 
   removeAllListeners(): void {
-    this.emitter.removeAllListeners();
+    this.handlers.clear();
   }
 }
 

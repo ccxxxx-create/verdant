@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { palette, worldPalette, typography, motion, radius, withAlpha } from '../ui/tokens';
+import { palette, worldPalette, typography, motion, radius } from '../ui/tokens';
 
 interface WorldCard {
   id: keyof typeof worldPalette;
@@ -34,7 +34,7 @@ export class MenuScene extends Phaser.Scene {
     this.drawHeader(width);
     this.drawWorldCards(width);
     this.drawStartButton(width);
-    this.drawFooter(width);
+    this.drawFooter(width, height);
   }
 
   /** 签名元素：三层雾带差速横移（GDD §11.2）。 */
@@ -62,17 +62,11 @@ export class MenuScene extends Phaser.Scene {
     this.add.image(width / 2, 132, 'icon_lightdew').setScale(0.7);
 
     this.add
-      .text(width / 2, 216, 'VERDANT', {
-        fontFamily: typography.display,
-        color: palette.primaryDeep,
-      })
+      .text(width / 2, 216, 'VERDANT', { ...typography.display, color: palette.primaryDeep })
       .setOrigin(0.5);
 
     this.add
-      .text(width / 2, 268, '内部代号阶段 · M0 脚手架 · 游戏名待定', {
-        fontFamily: typography.body,
-        color: palette.bgDeep,
-      })
+      .text(width / 2, 268, '内部代号阶段 · M0 脚手架 · 游戏名待定', { ...typography.body, color: palette.bgDeep })
       .setOrigin(0.5)
       .setAlpha(0.6);
   }
@@ -100,12 +94,12 @@ export class MenuScene extends Phaser.Scene {
       card.add(this.add.image(cardW / 2, 84, `world_${w.id}`).setScale(0.72));
       card.add(
         this.add
-          .text(cardW / 2, 142, w.name, { fontFamily: typography.heading, color: palette.bgDeep })
+          .text(cardW / 2, 142, w.name, { ...typography.heading, color: palette.bgDeep })
           .setOrigin(0.5),
       );
       card.add(
         this.add
-          .text(cardW / 2, 176, w.sub, { fontFamily: typography.caption, color: palette.bgDeep })
+          .text(cardW / 2, 176, w.sub, { ...typography.caption, color: palette.bgDeep })
           .setOrigin(0.5)
           .setAlpha(0.55),
       );
@@ -121,6 +115,7 @@ export class MenuScene extends Phaser.Scene {
     const btn = this.add.container(cx - btnW / 2, y);
 
     const g = this.add.graphics();
+    // 常态用雾青深 #3E6156：白字对比度 6.9:1，达小字 4.5:1 硬指标（GDD §10.2 注）。
     const paint = (fill: string, stroke: string, strokeW: number) => {
       g.clear();
       g.fillStyle(Phaser.Display.Color.HexStringToColor(fill).color, 1);
@@ -128,14 +123,11 @@ export class MenuScene extends Phaser.Scene {
       g.lineStyle(strokeW, Phaser.Display.Color.HexStringToColor(stroke).color, 1);
       g.strokeRoundedRect(0, 0, btnW, btnH, radius.md);
     };
-    paint(palette.primary, palette.primaryDeep, 2);
+    paint(palette.primaryDeep, palette.primary, 2);
     btn.add(g);
 
     const label = this.add
-      .text(btnW / 2, btnH / 2, '开始冒险', {
-        fontFamily: typography.heading,
-        color: '#FFFFFF',
-      })
+      .text(btnW / 2, btnH / 2, '开始冒险', { ...typography.heading, color: '#FFFFFF' })
       .setOrigin(0.5);
     btn.add(label);
 
@@ -143,21 +135,25 @@ export class MenuScene extends Phaser.Scene {
     btn.setInteractive({ useHandCursor: true });
 
     btn.on('pointerover', () => {
-      paint(palette.primary, palette.accent, 4);
+      paint(palette.primaryDeep, palette.accent, 4);
       this.tweens.add({ targets: btn, scale: 1.02, duration: motion.feedback, ease: 'Quad.easeOut' });
     });
     btn.on('pointerout', () => {
-      paint(palette.primary, palette.primaryDeep, 2);
+      paint(palette.primaryDeep, palette.primary, 2);
       this.tweens.add({ targets: btn, scale: 1, duration: motion.feedback, ease: 'Quad.easeOut' });
     });
-    btn.on('pointerdown', () => paint(palette.primaryDeep, palette.primaryDeep, 2));
+    btn.on('pointerdown', () => {
+      paint(palette.primaryDeep, palette.accent, 4);
+      this.tweens.add({ targets: btn, scale: 0.98, duration: motion.feedback, ease: 'Quad.easeOut' });
+    });
     btn.on('pointerup', () => {
-      paint(palette.primary, palette.accent, 4);
+      paint(palette.primaryDeep, palette.accent, 4);
+      this.tweens.add({ targets: btn, scale: 1.02, duration: motion.feedback, ease: 'Quad.easeOut' });
       this.showHint(cx, y + btnH + 28);
     });
 
     this.hint = this.add
-      .text(cx, y + btnH + 28, '', { fontFamily: typography.caption, color: palette.bgDeep })
+      .text(cx, y + btnH + 28, '', { ...typography.caption, color: palette.bgDeep })
       .setOrigin(0.5)
       .setAlpha(0);
   }
@@ -172,12 +168,13 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
-  private drawFooter(width: number): void {
+  private drawFooter(width: number, height: number): void {
     this.add
-      .text(width / 2, 1000, 'VERDANT · v0.1.0 · M0', {
-        fontFamily: typography.caption,
-        color: withAlpha(palette.bgDeep, 0.4),
+      .text(width / 2, height - 80, 'VERDANT · v0.1.0 · M0', {
+        ...typography.caption,
+        color: palette.bgDeep,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setAlpha(0.4);
   }
 }

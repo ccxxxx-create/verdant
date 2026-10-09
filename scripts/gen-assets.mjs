@@ -3,23 +3,15 @@
  * 运行：npm run assets → 输出到 public/assets/svg/。
  * M0 只生成 6 个占位资产；正式资产量产在 M3+。
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(root, 'public', 'assets', 'svg');
 
-const C = {
-  primaryDeep: '#3E6156',
-  moss: '#6FA86B',
-  reef: '#3E7C8C',
-  sky: '#7FA8D8',
-  frost: '#A8D8E8',
-  accent: '#F2C14E',
-  paper: '#F4F1EA',
-  ink: '#23272B',
-};
+// 调色板唯一事实源：与 src/ui/tokens.ts 共享 tokens.json（M0 审查 P1 修复）
+const { palette: C } = JSON.parse(readFileSync(join(root, 'src', 'ui', 'tokens.json'), 'utf8'));
 
 const wrap = (body, w = 100, h = 100) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">\n${body}\n</svg>\n`;
@@ -60,12 +52,12 @@ const svgs = {
   <path d="M42 52 A10 10 0 0 0 46 64" fill="none" stroke="${C.paper}" stroke-width="4" stroke-linecap="round"/>
   <path d="M50 14 C64 36 74 46 74 58 A24 24 0 0 1 26 58 C26 46 36 36 50 14 Z" fill="none" stroke="${C.primaryDeep}" stroke-width="3"/>`),
 
-  // 雾带（签名元素）：三层低透明度圆角矩形叠加，无滤镜（GDD §11.2）
+  // 雾带（签名元素）：三层低透明度圆角矩形叠加，无滤镜；宽 1920 覆盖设计画布（M0 审查 P2 修复）
   band_fog: wrap(
-    `<rect x="0" y="30" width="1600" height="80" rx="40" fill="${C.primaryDeep}" opacity="0.10"/>
-  <rect x="120" y="70" width="1360" height="70" rx="35" fill="${C.primaryDeep}" opacity="0.07"/>
-  <rect x="300" y="110" width="1000" height="60" rx="30" fill="${C.primaryDeep}" opacity="0.05"/>`,
-    1600,
+    `<rect x="0" y="30" width="1920" height="80" rx="40" fill="${C.primaryDeep}" opacity="0.10"/>
+  <rect x="160" y="70" width="1600" height="70" rx="35" fill="${C.primaryDeep}" opacity="0.07"/>
+  <rect x="380" y="110" width="1160" height="60" rx="30" fill="${C.primaryDeep}" opacity="0.05"/>`,
+    1920,
     260,
   ),
 };
