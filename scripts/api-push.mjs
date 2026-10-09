@@ -15,15 +15,17 @@ const REPO = 'ccxxxx-create/verdant';
 const BRANCH = 'main';
 const TOKEN = execSync('gh auth token', { encoding: 'utf8' }).trim();
 
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.vite', 'docs/_review']);
-const SKIP_FILES = new Set(['.gitignore']); // .gitignore 已在远端且未变（校验见下）
+const SKIP_TOP = new Set(['.git', 'node_modules', 'dist', '.vite', '.mimosa']);
+const SKIP_PREFIX = ['docs/_review/'];
 
-function walk(dir, out = []) {
+function walk(dir, out = [], rel = '') {
   for (const name of readdirSync(dir)) {
-    if (SKIP_DIRS.has(name)) continue;
+    if (SKIP_TOP.has(name)) continue;
     const p = join(dir, name);
+    const relPath = rel ? `${rel}/${name}` : name;
+    if (SKIP_PREFIX.some((pre) => relPath.startsWith(pre))) continue;
     const st = statSync(p);
-    if (st.isDirectory()) walk(p, out);
+    if (st.isDirectory()) walk(p, out, relPath);
     else if (st.isFile()) out.push(p);
   }
   return out;
@@ -72,7 +74,9 @@ const changed = [];
 for (const [path, sha] of localMap) {
   if (remoteMap.get(path) !== sha) changed.push(path);
 }
-const deleted = [...remoteMap.keys()].filter((p) => !localMap.has(p) && !SKIP_DIRS.has(p.split('/')[0]));
+const deleted = [...remoteMap.keys()].filter(
+  (p) => !localMap.has(p) && !SKIP_TOP.has(p.split('/')[0]) && !SKIP_PREFIX.some((pre) => p.startsWith(pre)),
+);
 
 console.log(`changed: ${changed.length}, deleted: ${deleted.length}`);
 if (changed.length === 0 && deleted.length === 0) {
