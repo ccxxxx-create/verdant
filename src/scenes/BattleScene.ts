@@ -249,7 +249,7 @@ export class BattleScene extends Phaser.Scene {
       pool: ['march_ant'],
       unlockUnits: ['firefly_reed', 'thorn_pea'],
       starCondition: 'none',
-      startingLight: 150,
+      startingLight: 50,
       plantFood: true,
     };
   }
@@ -677,7 +677,7 @@ export class BattleScene extends Phaser.Scene {
 
   // —— 单位行为 ——
   private updateUnits(): void {
-    for (const u of this.units) {
+    for (const u of [...this.units]) { // 快照遍历（trigger 爆破会移除单位）
       const def = u.def;
       if (def.produce && this.now - u.lastShot >= def.produce.intervalMs) {
         u.lastShot = this.now;
@@ -690,6 +690,26 @@ export class BattleScene extends Phaser.Scene {
       }
       const a = def.attack;
       if (!a) continue;
+      if (a.kind === 'trigger') {
+        // 埋地爆破（审查 P1-4：此前退化为 1400ms 单发 1800 直射=全场清屏）
+        const prep = a.prepMs ?? 12000;
+        if (this.now - u.lastShot < prep) continue;
+        const cx = u.img.x;
+        const reach = COL_W * ((a.radius ?? 1) + 0.2);
+        for (const e of [...this.enemies]) {
+          if (Math.abs(e.x - cx) < reach) {
+            e.hp -= a.damage ?? 400;
+            e.img.setTintFill(0xffffff);
+            e.flashUntil = this.now + 120;
+          }
+        }
+        this.cameras.main.shake(220, 0.006);
+        this.debris(cx, u.img.y, 'R', 16);
+        this.debris(cx, u.img.y, 'r', 10);
+        this.floatText(cx, u.img.y - 70, '轰！', '#FF8A3D');
+        this.removeUnit(u, true);
+        continue;
+      }
       const interval = a.intervalMs ?? 1400;
       if (this.now - u.lastShot < interval) continue;
       const target = this.nearestEnemyInRow(u.row, u.img.x - 20);
