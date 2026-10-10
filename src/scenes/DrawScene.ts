@@ -77,9 +77,9 @@ export class DrawScene extends Phaser.Scene {
       ['coins', wallet.coins],
     ];
     entries.forEach(([key, val], i) => {
-      const x = width - 200 - i * 160;
-      this.add.image(x, 92, `icon_${key === 'seeds' ? 'seed' : key === 'plantFood' ? 'energy' : key === 'diamonds' ? 'diamond' : 'coin'}`).setScale(2.2).setDepth(3);
-      this.add.text(x + 30, 92, `${val}`, { ...typography.body, fontSize: '18px', color: C_DARK }).setOrigin(0, 0.5).setDepth(3);
+      const x = width - 820 + i * 200;
+      this.add.image(x, 92, `icon_${key === 'seeds' ? 'seed' : key === 'plantFood' ? 'energy' : key === 'diamonds' ? 'diamond' : 'coin'}`).setScale(1.4).setDepth(3);
+      this.add.text(x + 52, 92, `×${val}`, { ...typography.body, fontSize: '18px', color: C_DARK }).setOrigin(0, 0.5).setDepth(3);
     });
   }
 

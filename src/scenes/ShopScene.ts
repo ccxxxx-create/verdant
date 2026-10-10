@@ -65,20 +65,20 @@ export class ShopScene extends Phaser.Scene {
       ['plantFood', wallet.plantFood],
     ];
     entries.forEach(([key, val], i) => {
-      const x = width - 220 - i * 170;
-      this.track(this.add.image(x, 92, WALLET_ICON[key] ?? 'icon_coin').setScale(2.4).setDepth(3));
-      this.track(this.add.text(x + 34, 92, `${WALLET_LABEL[key]} ${val}`, { ...typography.body, fontSize: '18px', color: C_DARK }).setOrigin(0, 0.5).setDepth(3));
+      const x = width - 880 + i * 220;
+      this.track(this.add.image(x, 92, WALLET_ICON[key] ?? 'icon_coin').setScale(1.4).setDepth(3));
+      this.track(this.add.text(x + 52, 92, `${WALLET_LABEL[key]} ${val}`, { ...typography.body, fontSize: '17px', color: C_DARK }).setOrigin(0, 0.5).setDepth(3));
     });
   }
 
   private drawUnits(width: number): void {
     const owned = this.save?.progress.unlockedUnits ?? [];
-    const cols = 4;
-    const cw = 340;
-    const ch = 220;
-    const gap = 36;
+    const cols = 5;
+    const cw = 300;
+    const ch = 230;
+    const gap = 40;
     const startX = (width - (cw * cols + gap * (cols - 1))) / 2;
-    const y0 = 190;
+    const y0 = 170;
     allUnits.forEach((u, i) => {
       const acq = UNIT_ACQUISITION[u.id];
       if (!acq) return;
@@ -92,34 +92,43 @@ export class ShopScene extends Phaser.Scene {
       g.lineStyle(3, hexToInt(acq.channel === 'diamonds' ? '#8E6FD8' : acq.channel === 'coins' ? '#F2C14E' : palette.primary), 1);
       g.strokeRoundedRect(0, 0, cw, ch, radius.lg);
       card.add(g);
-      card.add(this.add.image(64, 66, `unit_${u.id}`).setScale(1.5));
-      card.add(this.add.text(120, 40, u.name, { ...typography.heading, fontSize: '22px', color: C_DARK }));
+      card.add(this.add.image(58, 62, `unit_${u.id}`).setScale(1.4));
+      card.add(this.add.text(104, 38, u.name, { ...typography.heading, fontSize: '21px', color: C_DARK }));
       const channelText = acq.channel === 'gift' ? `赠送 · ${acq.note}` : acq.channel === 'coins' ? `金币 ${acq.price}` : `钻石 ${acq.price}`;
-      card.add(this.add.text(120, 76, channelText, { ...typography.caption, fontSize: '15px', color: isOwned ? palette.primaryDeep : '#8A5F3C' }));
+      card.add(this.add.text(104, 72, channelText, { ...typography.caption, fontSize: '14px', color: isOwned ? palette.primaryDeep : '#8A5F3C' }));
       card.add(
         this.add
           .text(20, ch - 58, u.flavor, { ...typography.caption, fontSize: '13px', color: C_DARK })
           .setOrigin(0, 0)
           .setAlpha(0.75)
-          .setWordWrapWidth(cw - 40),
+          .setWordWrapWidth(cw - 32),
       );
-      if (!isOwned && acq.channel !== 'gift' && acq.price !== undefined) {
-        const canBuy = acq.channel === 'coins' ? (this.save?.wallet.coins ?? 0) >= acq.price : (this.save?.wallet.diamonds ?? 0) >= acq.price;
-        const btnG = this.add.graphics().setDepth(3);
-        btnG.fillStyle(hexToInt(canBuy ? '#57C173' : '#B3AD9C'), 1);
-        btnG.fillRoundedRect(x + cw - 118, y + 14, 104, 44, 8);
-        this.track(btnG);
-        this.track(this.add.text(x + cw - 66, y + 36, canBuy ? '购买' : '差钱', { ...typography.body, fontSize: '16px', color: '#FFFFFF' }).setOrigin(0.5).setDepth(4));
-        const hit = this.track(this.add.zone(x + cw - 118, y + 14, 104, 44).setOrigin(0, 0).setDepth(5).setInteractive({ useHandCursor: canBuy }));
-        hit.on('pointerup', () => this.buy(u, acq.channel as 'coins' | 'diamonds', acq.price as number));
-      } else if (isOwned) {
+      // 右上角状态：已拥有 / 关卡获取（赠送未拥有）/ 购买·差钱
+      if (isOwned) {
         this.track(
           this.add
-            .text(x + cw - 60, y + 36, '已拥有', { ...typography.body, fontSize: '16px', color: palette.primaryDeep })
+            .text(x + cw - 54, y + 33, '已拥有', { ...typography.body, fontSize: '15px', color: palette.primaryDeep })
             .setOrigin(0.5)
             .setDepth(4)
             .setAlpha(0.9),
         );
+      } else if (acq.channel === 'gift') {
+        this.track(
+          this.add
+            .text(x + cw - 66, y + 33, '关卡获取', { ...typography.body, fontSize: '15px', color: '#8A5F3C' })
+            .setOrigin(0.5)
+            .setDepth(4)
+            .setAlpha(0.9),
+        );
+      } else if (acq.price !== undefined) {
+        const canBuy = acq.channel === 'coins' ? (this.save?.wallet.coins ?? 0) >= acq.price : (this.save?.wallet.diamonds ?? 0) >= acq.price;
+        const btnG = this.add.graphics().setDepth(3);
+        btnG.fillStyle(hexToInt(canBuy ? '#57C173' : '#B3AD9C'), 1);
+        btnG.fillRoundedRect(x + cw - 108, y + 12, 96, 42, 8);
+        this.track(btnG);
+        this.track(this.add.text(x + cw - 60, y + 33, canBuy ? '购买' : '差钱', { ...typography.body, fontSize: '15px', color: '#FFFFFF' }).setOrigin(0.5).setDepth(4));
+        const hit = this.track(this.add.zone(x + cw - 108, y + 12, 96, 42).setOrigin(0, 0).setDepth(5).setInteractive({ useHandCursor: canBuy }));
+        hit.on('pointerup', () => this.buy(u, acq.channel as 'coins' | 'diamonds', acq.price as number));
       }
     });
   }

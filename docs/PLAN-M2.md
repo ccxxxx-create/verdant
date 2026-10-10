@@ -32,7 +32,15 @@
 |---|---|---|
 | E1 | ✅ 完成 | RESEARCH-PVZ.md 落盘（2026-10-10） |
 | E2 | ✅ 完成 | mower 图标+接入，53 测试绿（2026-10-10） |
-| E3-E10 | ⏳ 待用户拍板后开工 | 4 个决策点见 §5 |
+| E3 | ✅ 完成 | 存档 schema v4（wallet/gacha）+ 迁移链 + 未知 key 剥离 + 测试（52c05c7） |
+| E4 | ✅ 完成 | 奖励核心 src/core/rewards.ts + 连胜经济测试 67 绿 |
+| E5 | ✅ 完成 | ShopScene（5 列 13 卡/三渠道/购买入档） |
+| E6 | ✅ 完成 | UNIT_ACQUISITION 4 赠+6 金+3 钻；卡组=拥有（BattleScene 读 save） |
+| E7 | ✅ 完成 | DrawScene：种子券单抽+钻石十连保底；概率表入数据 |
+| E8 | ✅ 完成 | 全面抄 PvZ1 数值（冷却/24s/1.43s/10s 天降/4.7s 格/起步 50）入 balance.ts |
+| E8+ | ✅ 完成 | 图鉴静态网页 docs/almanac.html（scripts/gen-almanac.mjs 同源生成） |
+| E9 | 🔄 进行中 | economy/save/review-fixes 三组测试已入；商店/抽奖/发奖浏览器实测通过 |
+| E10 | ⏳ 待 | 独立审查+推送+交付 |
 
 ## 5. 待用户拍板（AskUserQuestion）
 
