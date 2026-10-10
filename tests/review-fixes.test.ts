@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { producerTick } from '../src/core/economy.ts';
 import { migrate } from '../src/core/schema/save.ts';
-import { SaveV3 } from '../src/core/schema/save.ts';
+import { SaveV4 } from '../src/core/schema/save.ts';
 import { readSave, writeSave, type SaveStorage } from '../src/core/save.ts';
 import { LevelDef } from '../src/core/schema/level.ts';
 import { allEnemies, allUnits } from '../src/data/archetypes/index.ts';
@@ -46,7 +46,7 @@ describe('M1C review regression pins (3-subagent audit, 2026-10-10)', () => {
       futureThing: { hello: 'world' }, // 模拟来自未来的未知 key
     };
     const shaped = migrate(raw as Record<string, unknown>);
-    const parsed = SaveV3.parse(shaped); // 未知 key 被剥离，整档可解析 → 不清档
+    const parsed = SaveV4.parse(shaped); // 未知 key 被剥离，整档可解析 → 不清档
     expect(parsed.progress.clearedLevels).toEqual(['meadow-1-1']);
     expect(parsed.settings.master).toBeCloseTo(0.5);
     expect(parsed.stats.losses).toBe(2);

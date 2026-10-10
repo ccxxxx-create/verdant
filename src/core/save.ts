@@ -1,4 +1,4 @@
-import { SaveV3, defaultSave, migrate, type SaveGame } from './schema/save';
+import { SaveV4, defaultSave, migrate, type SaveGame } from './schema/save';
 
 /** 可注入存储：浏览器 localStorage / 测试用内存对象同构。 */
 export interface SaveStorage {
@@ -17,7 +17,7 @@ export function readSave(storage: SaveStorage, onError?: (err: unknown) => void)
   if (!raw) return defaultSave();
   try {
     const migrated = migrate(JSON.parse(raw) as Record<string, unknown>);
-    return SaveV3.parse(migrated);
+    return SaveV4.parse(migrated);
   } catch (err) {
     onError?.(err);
     // 解析失败先备份原始档再退默认档（审查 P1-2：此前静默清档零感知，进度全丢）
