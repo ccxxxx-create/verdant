@@ -21,9 +21,7 @@
     "firefly_reed",
     "thorn_pea",
     "wood_core",
-    "frost_pea",
-    "trifold_arrow",
-    "ember_fluff"
+    "frost_pea"
   ],
   "starCondition": "none",
   "startingLight": 50,

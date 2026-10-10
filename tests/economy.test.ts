@@ -122,6 +122,18 @@ describe('M2 economy: acquisition table', () => {
     }
   });
 
+  it('coin/diamond units are never also level gifts (no price/免费 conflict, review P1-2)', () => {
+    const giftedByLevels = new Set<string>();
+    for (const lv of [level11, level12, level13]) {
+      for (const u of lv.unlockUnits) giftedByLevels.add(u);
+    }
+    for (const [id, a] of Object.entries(UNIT_ACQUISITION)) {
+      if (a.channel === 'coins' || a.channel === 'diamonds') {
+        expect(giftedByLevels.has(id), `${id} 同时是购买渠道与关卡赠送`).toBe(false);
+      }
+    }
+  });
+
   it('gift units match level unlockUnits of 1-1/1-2/1-3', () => {
     const gifts = Object.entries(UNIT_ACQUISITION)
       .filter(([, a]) => a.channel === 'gift')

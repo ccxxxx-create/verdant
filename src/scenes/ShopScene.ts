@@ -25,6 +25,7 @@ export class ShopScene extends Phaser.Scene {
 
   create(): void {
     ensurePixelTextures(this);
+    this.parts = []; // restart 不残留上轮引用（审查 P2-3）
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     const { width } = this.scale.gameSize;
     this.drawBackdrop(width);
@@ -94,7 +95,8 @@ export class ShopScene extends Phaser.Scene {
       card.add(g);
       card.add(this.add.image(58, 62, `unit_${u.id}`).setScale(1.4));
       card.add(this.add.text(104, 38, u.name, { ...typography.heading, fontSize: '21px', color: C_DARK }));
-      const channelText = acq.channel === 'gift' ? `赠送 · ${acq.note}` : acq.channel === 'coins' ? `金币 ${acq.price}` : `钻石 ${acq.price}`;
+      const pricePart = acq.channel === 'gift' ? '赠送' : acq.channel === 'coins' ? `金币 ${acq.price}` : `钻石 ${acq.price}`;
+      const channelText = `${pricePart} · ${acq.note}`; // note 含 M3 实装标注（审查 P1-1：未实装 behavior 必须明示）
       card.add(this.add.text(104, 72, channelText, { ...typography.caption, fontSize: '14px', color: isOwned ? palette.primaryDeep : '#8A5F3C' }));
       card.add(
         this.add
@@ -142,8 +144,19 @@ export class ShopScene extends Phaser.Scene {
     if (channel === 'coins') save.wallet.coins -= price;
     else save.wallet.diamonds -= price;
     save.progress.unlockedUnits.push(u.id);
-    writeSave(window.localStorage, save);
+    let ok = true;
+    try {
+      writeSave(window.localStorage, save, () => {
+        ok = false;
+      });
+    } catch {
+      ok = false;
+    }
     this.registry.set('save', save);
+    if (!ok) {
+      this.track(this.add.text(960, 1020, '存档写入失败（浏览器存储不可用），本次购买未保存', { ...typography.body, color: '#B23A2E' }).setOrigin(0.5).setDepth(20));
+      return;
+    }
     this.scene.restart();
   }
 }

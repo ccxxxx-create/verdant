@@ -93,7 +93,7 @@ export const meadowUnits: readonly UnitInput[] = [
     cooldownMs: 50000,
     hp: 300,
     behaviors: ['attack'],
-    attack: { damage: 1800, kind: 'trigger', range: 1, radius: 1, prepMs: 12000 },
+    attack: { damage: 400, kind: 'trigger', range: 1, radius: 1, prepMs: 12000 },
     power: { kind: 'instant_trigger', params: {} },
     traits: ['burrowed', 'ground_only', 'one_shot'],
   },

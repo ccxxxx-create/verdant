@@ -130,6 +130,8 @@ function shapeCurrent(v: Unknown): Unknown {
   const w = (v['wallet'] as Unknown) ?? {};
   const g = (v['gacha'] as Unknown) ?? {};
   const strArr = (x: unknown): string[] => (Array.isArray(x) ? x.filter((i): i is string => typeof i === 'string') : []);
+  const WORLDS = ['meadow', 'reef', 'sky', 'frost'];
+  const QUALITIES = ['auto', 'high', 'medium', 'low'];
   const starsRaw = p['stars'] && typeof p['stars'] === 'object' ? (p['stars'] as Unknown) : {};
   const stars: Record<string, number> = {};
   for (const [k, val] of Object.entries(starsRaw)) {
@@ -143,7 +145,7 @@ function shapeCurrent(v: Unknown): Unknown {
       clearedLevels: strArr(p['clearedLevels']),
       stars,
       unlockedUnits: strArr(p['unlockedUnits']),
-      currentWorld: 'meadow',
+      currentWorld: WORLDS.includes(String(p['currentWorld'])) ? p['currentWorld'] : 'meadow', // 白名单透传（审查 P1-3：勿静默重置）
     },
     wallet: {
       coins: nonNeg(w['coins']),
@@ -159,7 +161,7 @@ function shapeCurrent(v: Unknown): Unknown {
       master: Math.min(1, Math.max(0, num(s['master'], 0.8))),
       music: Math.min(1, Math.max(0, num(s['music'], 0.6))),
       sfx: Math.min(1, Math.max(0, num(s['sfx'], 1))),
-      quality: 'auto',
+      quality: QUALITIES.includes(String(s['quality'])) ? s['quality'] : 'auto', // 白名单透传
       speedDefault: s['speedDefault'] === 2 ? 2 : 1,
       handLayout: s['handLayout'] === 'left' ? 'left' : 'right',
     },

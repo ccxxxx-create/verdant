@@ -81,7 +81,9 @@ export function rollTen(rng: Rng, owned: readonly string[]): GachaPrize[] {
         results.push(rollOnce(rng, ownedAfter));
       }
     } else {
-      results.push(rollOnce(rng, ownedAfter));
+      const prize = rollOnce(rng, ownedAfter);
+      if (prize.kind === 'unit' && prize.name) ownedAfter.push(prize.name); // 防十连同名角色两入队（审查 P2-2）
+      results.push(prize);
     }
   }
   return results;
