@@ -134,7 +134,7 @@ export function ensurePixelTextures(scene: Phaser.Scene): void {
  * 战斗场景（M1C）：PvZ 式布局 + 明亮草原。
  * 布局：顶部信息条(0-108) → 水平种子卡条(108-256) → 6×9 草坪(272-1040) → 左侧篱门。
  * 反馈闭环：#3 点击=格心+幽灵预览；#5 UI 与草坪零重叠；#6 参考 PvZ；#7 光露从天而降。
- * 打击感：闪白/挤压/碎屑/飘字/伤害数字/波次横幅/终波震屏/篱门拦截。
+ * 打击感：闪白/挤压/碎屑/飘字/伤害数字/波次横幅/终波震屏/小推车拦截。
  */
 export class BattleScene extends Phaser.Scene {
   private level: LevelDef;
@@ -274,7 +274,7 @@ export class BattleScene extends Phaser.Scene {
   /** 篱门（割草机式一次性护盾，PvZ 参考反馈#6）；消耗时图像随之消失。 */
   private drawGates(): void {
     for (let r = 0; r < ROWS; r++) {
-      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_gate').setScale(3);
+      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_mower').setScale(3); // PvZ 式小推车（用户反馈#3 重画）
     }
   }
 
@@ -775,11 +775,11 @@ export class BattleScene extends Phaser.Scene {
       if (e.x < GATE_X + 20) {
         const gate = this.gates[e.row];
         if (gate) {
-          // 篱门拦截：一次性护盾（割草机式，反馈#6/#4），消耗后图标消失
+          // 小推车拦截：一次性护盾（割草机式，反馈#6/#4），消耗后图标消失
           gate.destroy();
           this.gates[e.row] = null;
           this.cameras.main.flash(160, 255, 220, 120);
-          this.floatText(GATE_X + 60, cellY(e.row) - 30, '篱门拦截！', C_CREAM);
+          this.floatText(GATE_X + 60, cellY(e.row) - 30, '小推车出动！', C_CREAM);
           this.debris(GATE_X + 20, cellY(e.row), 'n', 10);
           this.killEnemy(i);
           continue;
