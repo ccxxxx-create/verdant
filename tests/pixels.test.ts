@@ -17,7 +17,7 @@ describe('pixel sprite data integrity', () => {
   it('all 11 enemy sprites + 4 projectiles + 20 icons are valid', () => {
     expect(Object.keys(allEnemySprites)).toHaveLength(11);
     expect(Object.keys(allProjectileSprites)).toHaveLength(4);
-    expect(Object.keys(allPixelIcons)).toHaveLength(20);
+    expect(Object.keys(allPixelIcons)).toHaveLength(24);
     expect(allPixelIcons.lightdew).toBeDefined();
     expect(allPixelIcons.gate).toBeDefined();
     expect(allPixelIcons.flag).toBeDefined();

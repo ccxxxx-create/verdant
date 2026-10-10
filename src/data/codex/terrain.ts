@@ -15,14 +15,14 @@ export const codexTerrainRules: readonly CodexTerrainRule[] = [
     element: '电',
     summary: '电属性命中水格即通电，向相邻水格最多传导 3 跳',
     trigger: '电属性攻击命中 Water 格 → Electrified 8 秒（每 0.5s 20 点真实伤害）',
-    counter: '水生友军也会短暂停攻；铁甲受伤减半；沉底敌人免疫',
+    counter: '水生友军也会短暂停攻；铁甲燃烧减半；沉底敌人免疫',
   },
   {
     id: 'fire',
     name: '火与蔓延',
     element: '火',
     summary: '火弹点燃灼烧敌人；草格会蔓延，水格被蒸干，冰面被融化',
-    trigger: '火属性命中 → 灼烧 5s（15 点/秒）；草格 60% 概率蔓延 1 次',
+    trigger: '火属性命中 → 灼烧 4s（15 点/秒，火抗减半）；草格 60% 概率蔓延 1 次',
     counter: '火抗敌人伤害 ×0.7；寒潮期间蔓延概率减半',
   },
   {
@@ -45,8 +45,8 @@ export const codexTerrainRules: readonly CodexTerrainRule[] = [
 
 /** 克制速查表（GDD §7.5 镜像，图鉴展示用）。 */
 export const codexCounters: readonly { attack: string; cloth: string; hide: string; shell: string; iron: string; air: string }[] = [
-  { attack: '单发直射', cloth: '1.0', hide: '0.8', shell: '0.6', iron: '0.35', air: '需对空' },
-  { attack: '多段散射', cloth: '1.0', hide: '0.8×段', shell: '0.6×段', iron: '0.2×段', air: '需对空' },
+  { attack: '单发直射', cloth: '1.0', hide: '0.85', shell: '0.7', iron: '0.55', air: '可打飞行' },
+  { attack: '多段散射', cloth: '1.0', hide: '0.85×段', shell: '0.7×段', iron: '0.55×段', air: '可打飞行' },
   { attack: '钝击', cloth: '1.0', hide: '1.0', shell: '1.5', iron: '1.5', air: '否' },
   { attack: '埋地爆炸', cloth: '1.0', hide: '1.0', shell: '1.0', iron: '1.0', air: '否' },
   { attack: '死亡爆炸', cloth: '1.0', hide: '1.0', shell: '1.0', iron: '1.0', air: '否' },

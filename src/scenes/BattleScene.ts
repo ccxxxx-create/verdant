@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { EnemyArchetype, UnitArchetype } from '../core/schema/unit.ts';
 import type { LevelDef } from '../core/schema/level.ts';
 import { registryFrom } from '../core/registry.ts';
+import { producerTick } from '../core/economy.ts';
 import { readSave, writeSave } from '../core/save.ts';
 import { Rng } from '../core/rng.ts';
 import { allEnemies, allUnits } from '../data/archetypes/index.ts';
@@ -121,7 +122,11 @@ export function ensurePixelTextures(scene: Phaser.Scene): void {
     const isBoss = e.id === 'stone_hide_giant';
     bakePixelTexture(scene, `enemy_${e.id}`, (enemySprites[e.id] ?? enemySprites.march_ant) as PixelSprite, isBoss ? 4 : 5);
   }
-  for (const [name, sprite] of Object.entries(pixelIcons)) bakePixelTexture(scene, `icon_${name}`, sprite, 4);
+  for (const [name, sprite] of Object.entries(projectileSprites)) bakePixelTexture(scene, name, sprite, 2); // 弹道（审查 P0：漏烘焙致所有子弹渲染成缺图占位块）
+  for (const [name, sprite] of Object.entries(pixelIcons)) {
+    // world_ 前缀=图鉴世界徽记：纹理键与 CodexScene 的 world_${w.id} 直连（审查 P1-7：此前从未烘焙→缺图空位）
+    bakePixelTexture(scene, name.startsWith('world_') ? name : `icon_${name}`, sprite, 4);
+  }
   bakePixelTexture(scene, 'bg_meadow', meadowBattleBg(), 6);
 }
 
@@ -143,11 +148,12 @@ export class BattleScene extends Phaser.Scene {
   private wave = 0;
   private waveTimer = 20;
   private inWave = false;
-  private spawnQueue: string[] = [];
+  private spawnQueue: { id: string; row: number }[] = [];
   private spawnTimer = 0;
   private dropTimer = 4.5;
   private speed = 1;
   private state: 'playing' | 'won' | 'lost' = 'playing';
+  private paused = false;
   private selected?: UnitArchetype;
   private shovelMode = false;
   private cooldownEnd = new Map<string, number>();
@@ -166,6 +172,8 @@ export class BattleScene extends Phaser.Scene {
   private waveText?: Phaser.GameObjects.Text;
   private speedText?: Phaser.GameObjects.Text;
   private waveBar?: Phaser.GameObjects.Graphics;
+  private pauseParts: Phaser.GameObjects.GameObject[] = [];
+  private pauseBtnText?: Phaser.GameObjects.Text;
   private waveFlag?: Phaser.GameObjects.Image;
 
   constructor() {
@@ -217,6 +225,7 @@ export class BattleScene extends Phaser.Scene {
     this.dropTimer = 4.5;
     this.speed = 1;
     this.state = 'playing';
+    this.paused = false;
     this.selected = undefined;
     this.shovelMode = false;
     this.now = 0;
@@ -224,6 +233,8 @@ export class BattleScene extends Phaser.Scene {
     this.gates = Array.from({ length: ROWS }, () => null); // 由 drawGates 填充
     this.banner?.destroy();
     this.banner = undefined;
+    for (const go of this.pauseParts) go.destroy();
+    this.pauseParts = [];
     this.ghost?.destroy();
     this.ghost = undefined;
     this.cellHighlight?.destroy();
@@ -290,13 +301,58 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(1, 0.5)
       .setDepth(11)
       .setInteractive({ useHandCursor: true });
-    this.speedText.on('pointerup', () => this.toggleSpeed());
+    this.speedText.on('pointerup', () => { if (this.state === 'playing' && !this.paused) this.toggleSpeed(); });
+
+    // 暂停/回主菜单入口（审查 P1-1：此前对局内无任何退出路径，平板只能关标签页）
+    this.pauseBtnText = this.add
+      .text(1660, 54, '⏸ 暂停', { ...typography.heading, fontSize: '22px', color: C_CREAM })
+      .setOrigin(1, 0.5)
+      .setDepth(11)
+      .setInteractive({ useHandCursor: true });
+    this.pauseBtnText.on('pointerup', () => this.togglePause());
 
     this.add
-      .text(1880, 100, '空格加速 · 右键/铲子挖除', { ...typography.caption, color: C_CREAM })
+      .text(1880, 100, '空格加速 · 右键/铲子挖除 · ESC 取消', { ...typography.caption, color: C_CREAM })
       .setOrigin(1, 1)
       .setDepth(11)
       .setAlpha(0.8);
+  }
+
+  /** 暂停：停止 update 并弹"继续/回主菜单"层（交互件全部场景级，勿放容器）。 */
+  private togglePause(): void {
+    if (this.state !== 'playing') return;
+    this.paused = !this.paused;
+    if (this.pauseBtnText) this.pauseBtnText.setText(this.paused ? '▶ 继续' : '⏸ 暂停');
+    if (!this.paused) {
+      for (const go of this.pauseParts) go.destroy();
+      this.pauseParts = [];
+      return;
+    }
+    const dim = this.add.rectangle(960, 540, 1920, 1080, 0x26402f, 0.55).setDepth(30).setInteractive();
+    this.pauseParts.push(dim);
+    const panel = this.add.graphics().setDepth(31);
+    panel.fillStyle(PAPER, 0.98);
+    panel.fillRoundedRect(710, 400, 500, 280, 16);
+    panel.lineStyle(3, OUTLINE, 1);
+    panel.strokeRoundedRect(710, 400, 500, 280, 16);
+    this.pauseParts.push(panel);
+    const mkBtn = (label: string, y: number, onClick: () => void): void => {
+      const g = this.add.graphics().setDepth(32);
+      g.fillStyle(WOOD_LIGHT, 1);
+      g.fillRoundedRect(770, y, 380, 64, 10);
+      this.pauseParts.push(g);
+      const t = this.add
+        .text(960, y + 32, label, { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: C_DARK })
+        .setOrigin(0.5)
+        .setDepth(32);
+      this.pauseParts.push(t);
+      const hit = this.add.zone(770, y, 380, 64).setOrigin(0, 0).setDepth(33).setInteractive({ useHandCursor: true });
+      hit.on('pointerup', onClick);
+      this.pauseParts.push(hit);
+    };
+    this.pauseParts.push(this.add.text(960, 450, '已暂停', { fontFamily: FONT, fontSize: '36px', fontStyle: 'bold', color: C_DARK }).setOrigin(0.5).setDepth(32));
+    mkBtn('继续布防', 500, () => this.togglePause());
+    mkBtn('回主菜单', 590, () => this.scene.start('Menu'));
   }
 
   private drawSeedBar(): void {
@@ -307,7 +363,7 @@ export class BattleScene extends Phaser.Scene {
     g.lineBetween(0, SEED_BAR_Y, 1920, SEED_BAR_Y);
     g.lineBetween(0, SEED_BAR_Y + SEED_BAR_H, 1920, SEED_BAR_Y + SEED_BAR_H);
 
-    const defaultDeck = ['firefly_reed', 'thorn_pea', 'frost_pea', 'ember_fluff', 'wood_core', 'tether_moss'];
+    const defaultDeck = ['firefly_reed', 'thorn_pea', 'frost_pea', 'ember_fluff', 'wood_core'];
     const deckIds = this.level.unlockUnits.length > 0 ? this.level.unlockUnits : defaultDeck;
     const deck = deckIds.map((id) => this.archetypes.unitById.get(id)).filter((u): u is UnitArchetype => !!u);
     this.cards = [];
@@ -356,7 +412,7 @@ export class BattleScene extends Phaser.Scene {
     this.shovelFrame = this.add.graphics().setDepth(12);
     const shovelHit = this.add.zone(shovelX, CARD_Y, CARD_W, CARD_H).setOrigin(0, 0).setDepth(12).setInteractive({ useHandCursor: true });
     shovelHit.on('pointerup', () => {
-      if (this.state !== 'playing') return;
+      if (this.state !== 'playing' || this.paused) return;
       this.shovelMode = !this.shovelMode;
       this.selected = undefined;
       this.refreshSelectionUi();
@@ -423,7 +479,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** 幽灵预览 + 格子高亮（反馈#3：所见即所种）。 */
   private updateGhost(p: Phaser.Input.Pointer): void {
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' || this.paused) return;
     this.cellHighlight?.destroy();
     this.cellHighlight = undefined;
     const cell = pointerToCell(p.x, p.y);
@@ -455,6 +511,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private toggleSpeed(): void {
+    if (this.state !== 'playing') return;
     this.speed = this.speed === 1 ? 2 : 1;
     this.tweens.timeScale = this.speed;
     this.speedText?.setText(`${this.speed}× 速度`);
@@ -462,9 +519,10 @@ export class BattleScene extends Phaser.Scene {
 
   // —— 主循环 ——
   update(_time: number, delta: number): void {
-    if (this.state !== 'playing') return;
-    const dt = (Math.min(delta, 50) / 1000) * this.speed; // 钳制切后台回来的巨帧
-    this.now += delta * this.speed; // 统一时基：倍速下所有计时同步
+    if (this.state !== 'playing' || this.paused) return;
+    const clamped = Math.min(delta, 50); // 钳制切后台回来的巨帧
+    const dt = (clamped / 1000) * this.speed;
+    this.now += clamped * this.speed; // 统一时基：倍速下所有计时同步（now 与 dt 同钳制）
 
     this.updateSunSpawns(dt);
     this.updateDrops(dt);
@@ -560,8 +618,8 @@ export class BattleScene extends Phaser.Scene {
     }
     this.spawnTimer -= dt;
     if (this.spawnQueue.length > 0 && this.spawnTimer <= 0) {
-      const id = this.spawnQueue.shift();
-      if (id) this.spawnEnemy(id);
+      const item = this.spawnQueue.shift();
+      if (item) this.spawnEnemy(item.id, item.row);
       this.spawnTimer = SPAWN_INTERVAL_S[this.level.template] ?? 1.8;
     }
     if (this.spawnQueue.length === 0 && this.enemies.length === 0) {
@@ -575,19 +633,29 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private startWave(): void {
+    const scale = WAVE_SCALE[this.level.template] ?? 1;
+    const isFinal = this.wave + 1 === this.level.waves;
+    const budget = Math.max(1, Math.round(6 * (1 + (this.wave + 1) * 0.3) * scale * (isFinal ? 2.5 : 1)));
+    const pool = this.level.pool.map((id) => this.archetypes.enemyById.get(id)).filter((e): e is EnemyArchetype => !!e);
+    if (pool.length === 0) {
+      // 数据错误 fail-fast：绝不放空波让其"零战斗通关"发 3 星（审查 P1-4）
+      this.bannerText('关卡数据错误：亮相池为空', 2.5);
+      this.time.delayedCall(2600 / this.speed, () => this.scene.start('Menu'));
+      return;
+    }
     this.wave += 1;
     this.inWave = true;
-    const scale = WAVE_SCALE[this.level.template] ?? 1;
-    const isFinal = this.wave === this.level.waves;
-    const budget = Math.max(1, Math.round(6 * (1 + this.wave * 0.3) * scale * (isFinal ? 2.5 : 1)));
-    const pool = this.level.pool.map((id) => this.archetypes.enemyById.get(id)).filter((e): e is EnemyArchetype => !!e);
     this.spawnQueue = [];
     let left = budget;
     let guard = 0;
+    let laneCursor = 0;
+    // teach 前 3 波每行至多 1 只（审查 P1-3：原首波 2 只同行概率 44.5%，新手看不见来向=必败风险）
+    const laneDedupe = this.level.template === 'teach' && this.wave <= 3;
     while (left > 0 && guard++ < 80) {
       const pick = pool[this.rng.int(0, pool.length)];
-      if (!pick || pick.points <= 0 || pick.points > left) break; // points<=0（Boss）不入普通波池
-      this.spawnQueue.push(pick.id);
+      if (!pick || pick.points <= 0) break; // 点数 0（Boss）不入普通波池
+      if (pick.points > left) continue; // 点数超预算换一只（勿 break 浪费预算）
+      this.spawnQueue.push({ id: pick.id, row: laneDedupe ? laneCursor++ % ROWS : this.rng.int(0, ROWS) });
       left -= pick.points;
     }
     this.spawnTimer = 0.5;
@@ -599,10 +667,9 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private spawnEnemy(id: string): void {
+  private spawnEnemy(id: string, row: number): void {
     const def = this.archetypes.enemyById.get(id);
     if (!def) return;
-    const row = this.rng.int(0, ROWS);
     const img = this.add.image(1960, 0, `enemy_${id}`);
     const h = img.displayHeight;
     // 飞行单位悬空于车道上方（PvZ 气球式）；地面单位脚贴行底（防漂浮）
@@ -616,9 +683,10 @@ export class BattleScene extends Phaser.Scene {
       const def = u.def;
       if (def.produce && this.now - u.lastShot >= def.produce.intervalMs) {
         u.lastShot = this.now;
-        this.lightdew += def.produce.amount;
-        this.spawnPlantSun(u);
-        this.floatText(u.img.x, u.img.y - 56, `+${def.produce.amount}`, C_GOLD);
+        // 收益只走掉落路径：立即到账为 0，阳光须玩家点击收集（反馈#7 + 审查 P1-1）
+        const tick = producerTick(def);
+        this.lightdew += tick.immediateGain;
+        if (tick.spawnsDrop) this.spawnPlantSun(u);
         this.squash(u.img);
         continue;
       }
@@ -697,8 +765,9 @@ export class BattleScene extends Phaser.Scene {
           e.img.setAngle(Math.sin(this.now / 140) * 2); // 行走摇摆
         }
       } else {
-        // 飞行：掠过单位直扑篱门
-        const slow = e.slowUntil > this.now ? 0.6 : 1;
+        // 飞行：掠过单位直扑篱门（减速同样尊重 slow_immune，审查 P2-6）
+        const slowImmune = e.def.traits?.includes('slow_immune') ?? false;
+        const slow = !slowImmune && e.slowUntil > this.now ? 0.6 : 1;
         e.x -= e.def.speed * COL_W * slow * dt;
         e.img.x = e.x;
         e.img.y = cellY(e.row) - 30 + Math.sin(this.now / 220) * 6;
@@ -751,8 +820,14 @@ export class BattleScene extends Phaser.Scene {
 
   // —— 交互 ——
   private onPointer(p: Phaser.Input.Pointer): void {
-    if (this.state !== 'playing') return;
-    // 1) 收集阳光（优先级最高；一次点击只做一个意图；顶条后的下落阳光不可见也不可点）
+    if (this.state !== 'playing' || this.paused) return;
+    // 1) 铲除/光标意图优先（审查 P2-1：铲子模式下不再被阳光抢走同一次点击）
+    if (p.rightButtonDown() || this.shovelMode) {
+      const cell = pointerToCell(p.x, p.y);
+      if (cell) this.digAt(cell.row, cell.col);
+      return;
+    }
+    // 2) 收集阳光（一次点击只做一个意图；顶条后的下落阳光不可见也不可点）
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i];
       if (!d || d.img.y < GRID_Y0) continue;
@@ -761,12 +836,6 @@ export class BattleScene extends Phaser.Scene {
         this.drops.splice(i, 1);
         return;
       }
-    }
-    // 2) 铲除（右键或铲子模式）
-    if (p.rightButtonDown() || this.shovelMode) {
-      const cell = pointerToCell(p.x, p.y);
-      if (cell) this.digAt(cell.row, cell.col);
-      return;
     }
     // 3) 种植
     if (!this.selected) return;
@@ -890,19 +959,20 @@ export class BattleScene extends Phaser.Scene {
 
   private bannerText(text: string, hold: number): void {
     this.banner?.destroy();
-    this.banner = this.add
+    const b = this.add
       .text(960, 420, text, { fontFamily: FONT, fontSize: '52px', fontStyle: 'bold', color: C_GOLD })
       .setOrigin(0.5)
       .setDepth(20)
       .setStroke(C_DARK, 8)
       .setAlpha(0);
+    this.banner = b;
     this.tweens.add({
-      targets: this.banner,
+      targets: b,
       alpha: 1,
       duration: 140,
       yoyo: true,
       hold,
-      onComplete: () => this.banner?.destroy(),
+      onComplete: () => b.destroy(), // 闭包捕获自身 target（审查 P2-5）
     });
   }
 
@@ -922,7 +992,19 @@ export class BattleScene extends Phaser.Scene {
     this.state = 'won';
     this.persistProgress(3);
     this.bannerText('胜利！晨雾草原守住了', 2);
-    this.time.delayedCall(2400, () => this.scene.start('Menu'));
+    this.time.delayedCall(2400 / this.speed, () => this.scene.start('Menu'));
+  }
+
+  /** 败北写档：stats.losses（审查 P2-7：此前永不更新）。 */
+  private persistLoss(): void {
+    try {
+      const save = readSave(window.localStorage);
+      save.stats.losses += 1;
+      writeSave(window.localStorage, save);
+      this.registry.set('save', save);
+    } catch (err) {
+      console.error('[save] persist failed', err);
+    }
   }
 
   /** 通关写档：clearedLevels/stars/unlockedUnits/kills（localStorage）。 */
@@ -947,9 +1029,10 @@ export class BattleScene extends Phaser.Scene {
   private loseLevel(): void {
     if (this.state === 'lost') return;
     this.state = 'lost';
+    this.persistLoss();
     this.cameras.main.shake(420, 0.012);
     this.cameras.main.flash(300, 120, 20, 20);
     this.bannerText('防线失守…', 2);
-    this.time.delayedCall(2400, () => this.scene.start('Menu'));
+    this.time.delayedCall(2400 / this.speed, () => this.scene.start('Menu'));
   }
 }

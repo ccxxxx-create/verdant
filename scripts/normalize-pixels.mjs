@@ -31,6 +31,7 @@ function toSize(sprite, w, h, bottomAlign = false) {
   });
 }
 
+// 单位矩阵的所有者是 scripts/gen-pixel-units.mjs：仅尺寸校验，不落盘（审查 P2-12）
 const units = Object.fromEntries(Object.entries(unitSprites).map(([k, v]) => [k, toSize(v, 32, 32)]));
 const enemies = Object.fromEntries(
   Object.entries(enemySprites).map(([k, v]) => {
@@ -48,11 +49,6 @@ function emitTable(table) {
     .join('\n');
 }
 
-writeFileSync(
-  join(root, 'src/data/pixels/units/meadow.ts'),
-  `import type { PixelSprite } from '../palette.ts';\n\n/**\n * 草原 13 单位像素矩阵（32×32，已归一化）。\n * 结构纪律：脸（y15-18 眼+嘴）/ 身体（y13-28）/ 顶部特征件（按职能）。\n */\nexport const unitSprites: Record<string, PixelSprite> = {\n${emitTable(units)}\n};\n`,
-  'utf8',
-);
 writeFileSync(
   join(root, 'src/data/pixels/enemies/meadow.ts'),
   `import type { PixelSprite } from '../palette.ts';\n\n/**\n * 草原 11 敌人像素矩阵（24×24；Boss 32×32）+ 子弹（8×8）。已归一化。\n * 纪律：金色眼睛签名；护甲分层。\n */\nexport const enemySprites: Record<string, PixelSprite> = {\n${emitTable(enemies)}\n};\n\nexport const projectileSprites: Record<string, PixelSprite> = {\n${emitTable(projectiles)}\n};\n`,

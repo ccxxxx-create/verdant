@@ -231,7 +231,7 @@ export class MenuScene extends Phaser.Scene {
     });
 
     this.add
-      .text(width / 2, y + 76, 'VERDANT · v0.1.0 · M1B', { ...typography.caption, color: palette.bgDeep })
+      .text(width / 2, y + 76, 'VERDANT · v0.1.0 · M1C', { ...typography.caption, color: palette.bgDeep })
       .setOrigin(0.5)
       .setAlpha(0.4);
   }

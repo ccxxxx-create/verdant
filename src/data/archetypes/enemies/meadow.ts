@@ -18,7 +18,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     id: 'iron_beak_sparrow',
     world: 'meadow',
     name: '铁喙雀',
-    flavor: '早期飞行单位，没有对空火力只能干看',
+    flavor: '掠过植株直扑篱门，火力覆盖够密才能拦下它',
     hp: 70,
     speed: 0.34,
     biteDps: 4,
