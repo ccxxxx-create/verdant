@@ -21,6 +21,6 @@
     "wood_core"
   ],
   "starCondition": "none",
-  "startingLight": 150,
+  "startingLight": 50,
   "plantFood": true
 }

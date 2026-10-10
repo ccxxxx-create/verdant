@@ -4,6 +4,8 @@ import { PreloadScene } from './scenes/PreloadScene';
 import { MenuScene } from './scenes/MenuScene';
 import { CodexScene } from './scenes/CodexScene';
 import { BattleScene } from './scenes/BattleScene';
+import { ShopScene } from './scenes/ShopScene';
+import { DrawScene } from './scenes/DrawScene';
 
 // 设计基准分辨率 1920×1080（GDD §10.4）：FIT + AUTO_CENTER。
 export const DESIGN_WIDTH = 1920;
@@ -19,5 +21,5 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, PreloadScene, MenuScene, CodexScene, BattleScene],
+  scene: [BootScene, PreloadScene, MenuScene, CodexScene, BattleScene, ShopScene, DrawScene],
 };

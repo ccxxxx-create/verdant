@@ -65,7 +65,7 @@ export const EnemyArchetype = z.strictObject({
   waterborne: z.boolean().default(false),
   isBoss: z.boolean().default(false),
   points: z.number().int().nonnegative(),
-});
+}); // 格/秒（1 格≈4.7s；行蚁 0.21 ≈ PvZ1 普通僵尸横穿速度）
 
 export type EnemyArchetype = z.infer<typeof EnemyArchetype>;
 /** 数据侧书写类型（默认值未应用前的输入形态）。 */
