@@ -71,7 +71,48 @@ function toV3(v2: Unknown): Unknown {
 
 const MIGRATIONS: Record<number, (v: Unknown) => Unknown> = { 1: toV2, 2: toV3 };
 
-/** 逐级升级到当前版本；未知版本号抛错（不毁档，由调用方回退默认档）。 */
+function num(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
+/** 末态显式只取已知字段（审查 P1-2：strictObject 遇未知 key 整档拒绝→静默清档，改为剥离未知 key）。 */
+function shapeCurrent(v: Unknown): Unknown {
+  const p = (v['progress'] as Unknown) ?? {};
+  const s = (v['settings'] as Unknown) ?? {};
+  const st = (v['stats'] as Unknown) ?? {};
+  const strArr = (x: unknown): string[] => (Array.isArray(x) ? x.filter((i): i is string => typeof i === 'string') : []);
+  const starsRaw = p['stars'] && typeof p['stars'] === 'object' ? (p['stars'] as Unknown) : {};
+  const stars: Record<string, number> = {};
+  for (const [k, val] of Object.entries(starsRaw)) {
+    const n = num(val, -1);
+    if (n >= 0 && n <= 3) stars[k] = n;
+  }
+  return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    updatedAt: typeof v['updatedAt'] === 'string' ? v['updatedAt'] : new Date(0).toISOString(),
+    progress: {
+      clearedLevels: strArr(p['clearedLevels']),
+      stars,
+      unlockedUnits: strArr(p['unlockedUnits']),
+      currentWorld: 'meadow',
+    },
+    settings: {
+      master: Math.min(1, Math.max(0, num(s['master'], 0.8))),
+      music: Math.min(1, Math.max(0, num(s['music'], 0.6))),
+      sfx: Math.min(1, Math.max(0, num(s['sfx'], 1))),
+      quality: 'auto',
+      speedDefault: s['speedDefault'] === 2 ? 2 : 1,
+      handLayout: s['handLayout'] === 'left' ? 'left' : 'right',
+    },
+    stats: {
+      playSeconds: Math.max(0, num(st['playSeconds'], 0)),
+      wins: Math.max(0, num(st['wins'], 0)),
+      losses: Math.max(0, num(st['losses'], 0)),
+    },
+  };
+}
+
+/** 逐级升级到当前版本；末态剥离未知字段，避免"来自未来的档"被 strictObject 整档拒绝。 */
 export function migrate(raw: Unknown): Unknown {
   let cur = raw;
   const first = cur['schemaVersion'];
@@ -86,7 +127,7 @@ export function migrate(raw: Unknown): Unknown {
     version = next;
   }
   if (version > CURRENT_SCHEMA_VERSION) throw new Error('save: from the future');
-  return cur;
+  return shapeCurrent(cur);
 }
 
 export { enemyPoints };

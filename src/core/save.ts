@@ -20,6 +20,12 @@ export function readSave(storage: SaveStorage, onError?: (err: unknown) => void)
     return SaveV3.parse(migrated);
   } catch (err) {
     onError?.(err);
+    // 解析失败先备份原始档再退默认档（审查 P1-2：此前静默清档零感知，进度全丢）
+    try {
+      storage.setItem(`${SAVE_KEY}.bak`, raw);
+    } catch {
+      /* 备份失败不阻塞回退 */
+    }
     return defaultSave();
   }
 }
