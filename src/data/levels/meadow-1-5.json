@@ -1,0 +1,31 @@
+{
+  "id": "meadow-1-5",
+  "world": "meadow",
+  "template": "normal",
+  "rows": 6,
+  "cols": 9,
+  "terrain": {
+    "waterColumns": [],
+    "brokenCells": [],
+    "iceColumns": [],
+    "wind": "none"
+  },
+  "waves": 14,
+  "pool": [
+    "march_ant",
+    "grey_tide_swarm",
+    "iron_beak_sparrow",
+    "vine_boa"
+  ],
+  "unlockUnits": [
+    "firefly_reed",
+    "thorn_pea",
+    "wood_core",
+    "frost_pea",
+    "trifold_arrow",
+    "ember_fluff"
+  ],
+  "starCondition": "none",
+  "startingLight": 175,
+  "plantFood": true
+}

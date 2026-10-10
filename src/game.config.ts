@@ -14,7 +14,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   parent: 'game',
   width: DESIGN_WIDTH,
   height: DESIGN_HEIGHT,
-  backgroundColor: '#0F2E27',
+  backgroundColor: '#A5DFF7', // 晨天蓝（明亮草原基调，M1C 提亮）
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

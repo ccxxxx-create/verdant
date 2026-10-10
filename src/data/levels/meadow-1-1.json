@@ -11,9 +11,14 @@
     "wind": "none"
   },
   "waves": 10,
-  "pool": ["march_ant"],
-  "unlockUnits": ["firefly_reed", "thorn_pea"],
+  "pool": [
+    "march_ant"
+  ],
+  "unlockUnits": [
+    "firefly_reed",
+    "thorn_pea"
+  ],
   "starCondition": "none",
-  "startingLight": 75,
+  "startingLight": 150,
   "plantFood": true
 }
