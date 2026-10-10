@@ -1,7 +1,7 @@
 {
-  "id": "meadow-1-1",
+  "id": "meadow-1-2",
   "world": "meadow",
-  "template": "teach",
+  "template": "normal",
   "rows": 6,
   "cols": 9,
   "terrain": {
@@ -10,13 +10,15 @@
     "iceColumns": [],
     "wind": "none"
   },
-  "waves": 10,
+  "waves": 12,
   "pool": [
-    "march_ant"
+    "march_ant",
+    "grey_tide_swarm"
   ],
   "unlockUnits": [
     "firefly_reed",
-    "thorn_pea"
+    "thorn_pea",
+    "wood_core"
   ],
   "starCondition": "none",
   "startingLight": 150,

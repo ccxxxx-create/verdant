@@ -6,6 +6,13 @@ import { LevelDef } from '../core/schema/level.ts';
 import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
 import level11 from '../data/levels/meadow-1-1.json';
+import level12 from '../data/levels/meadow-1-2.json';
+import level13 from '../data/levels/meadow-1-3.json';
+import level14 from '../data/levels/meadow-1-4.json';
+import level15 from '../data/levels/meadow-1-5.json';
+
+/** 冒险模式关卡表（M1C：草原前 5 关，渐进解锁）。 */
+const ADVENTURE_LEVELS = [level11, level12, level13, level14, level15];
 
 /** 总单位数（图鉴完成度分母；M1B 仅草原 13，分母取 GDD 首发 51）。 */
 const TOTAL_UNITS = 51;
@@ -19,6 +26,7 @@ export class MenuScene extends Phaser.Scene {
   private hint?: Phaser.GameObjects.Text;
   private hintTimer?: Phaser.Time.TimerEvent;
   private save?: SaveGame;
+  private pickerParts: Phaser.GameObjects.GameObject[] = [];
 
   constructor() {
     super('Menu');
@@ -27,6 +35,11 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     const { width, height } = this.scale.gameSize;
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
+    // 场景重启清理：选关层部件已被 shutdown 销毁，残留引用会挡住二次打开（防二次进入冻结，同 M1B P0 教训）
+    this.pickerParts = [];
+    this.hint = undefined;
+    this.hintTimer?.remove();
+    this.hintTimer = undefined;
 
     for (const [name, sprite] of Object.entries(pixelIcons)) bakePixelTexture(this, `icon_${name}`, sprite, 4);
     this.drawBackdrop(width);
@@ -141,7 +154,7 @@ export class MenuScene extends Phaser.Scene {
   // —— 模式入口行 ——
   private drawModeRow(width: number): void {
     const modes: { label: string; sub: string; color: string; ready: boolean; icon: string; action: 'battle' | 'codex' | 'hint' }[] = [
-      { label: '冒险', sub: '晨雾草原 · 1-1', color: palette.primary, ready: true, icon: 'sprout', action: 'battle' },
+      { label: '冒险', sub: '晨雾草原 · 前 5 关', color: palette.primary, ready: true, icon: 'sprout', action: 'battle' },
       { label: '图鉴', sub: '51 生灵 / 44 怪兽', color: palette.accent, ready: true, icon: 'book', action: 'codex' },
       { label: '竞技场', sub: 'M6 规划中', color: palette.reef, ready: false, icon: 'skull', action: 'hint' },
       { label: '每日挑战', sub: 'BACKLOG', color: palette.sky, ready: false, icon: 'calendar', action: 'hint' },
@@ -182,14 +195,7 @@ export class MenuScene extends Phaser.Scene {
           return;
         }
         if (m.action === 'battle') {
-          const parsed = LevelDef.safeParse(level11);
-          if (parsed.success) {
-            this.registry.set('level', parsed.data);
-            this.scene.start('Battle');
-          } else {
-            this.showHint(width / 2, y + bh + 34, '关卡数据校验失败（见控制台）');
-            console.error('[level] invalid meadow-1-1:', parsed.error.issues);
-          }
+          this.openLevelPicker();
           return;
         }
         this.showHint(width / 2, y + bh + 34, `${m.label}在后续里程碑开放（docs/BACKLOG.md）`);
@@ -228,6 +234,101 @@ export class MenuScene extends Phaser.Scene {
       .text(width / 2, y + 76, 'VERDANT · v0.1.0 · M1B', { ...typography.caption, color: palette.bgDeep })
       .setOrigin(0.5)
       .setAlpha(0.4);
+  }
+
+  // —— 选关层（M1C：草原 1-1~1-5，渐进解锁）——
+  // 纪律：交互 zone 必须是场景级对象（容器子 zone 挂在 depth>0 容器时命中不可靠，实测选关卡无响应）。
+  private openLevelPicker(): void {
+    if (this.pickerParts.length > 0) return;
+    const { width } = this.scale.gameSize;
+    const add = <T extends Phaser.GameObjects.GameObject>(go: T): T => {
+      this.pickerParts.push(go);
+      return go;
+    };
+
+    add(this.add.rectangle(width / 2, 540, width, 1080, 0x26402f, 0.55).setDepth(50).setInteractive());
+    const pw = 1080;
+    const ph = 470;
+    const px = (width - pw) / 2;
+    const py = 300;
+    const panel = add(this.add.graphics().setDepth(51));
+    panel.fillStyle(0xffffff, 0.97);
+    panel.fillRoundedRect(px, py, pw, ph, radius.lg);
+    panel.lineStyle(3, hexToInt(worldPalette.meadow), 1);
+    panel.strokeRoundedRect(px, py, pw, ph, radius.lg);
+    add(
+      this.add
+        .text(width / 2, py + 46, '晨雾草原 · 选择关卡', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '30px', fontStyle: 'bold', color: palette.bgDeep })
+        .setOrigin(0.5)
+        .setDepth(52),
+    );
+
+    const cleared: string[] = this.save ? this.save.progress.clearedLevels : [];
+    const bw = 172;
+    const bh = 250;
+    const gap = 28;
+    const startX = width / 2 - (bw * ADVENTURE_LEVELS.length + gap * (ADVENTURE_LEVELS.length - 1)) / 2;
+    const by = py + 110;
+    ADVENTURE_LEVELS.forEach((lv, i) => {
+      const prev = ADVENTURE_LEVELS[i - 1];
+      const unlocked = i === 0 || (prev !== undefined && cleared.includes(prev.id));
+      const done = cleared.includes(lv.id);
+      const bx = startX + i * (bw + gap);
+      const card = add(this.add.container(bx, by).setDepth(52));
+      const g = this.add.graphics();
+      g.fillStyle(0xffffff, 1);
+      g.fillRoundedRect(0, 0, bw, bh, radius.md);
+      g.lineStyle(3, unlocked ? hexToInt(worldPalette.meadow) : hexToInt(palette.bgDeep), unlocked ? 1 : 0.25);
+      g.strokeRoundedRect(0, 0, bw, bh, radius.md);
+      card.add(g);
+      card.add(
+        this.add
+          .text(bw / 2, 40, `1-${i + 1}`, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '30px', fontStyle: 'bold', color: unlocked ? palette.bgDeep : withAlpha(palette.bgDeep, 0.4) })
+          .setOrigin(0.5),
+      );
+      card.add(this.add.image(bw / 2, 108, `icon_${done ? 'trophy' : unlocked ? 'sprout' : 'skull'}`).setDisplaySize(unlocked ? 56 : 48, unlocked ? 56 : 48).setAlpha(unlocked ? 1 : 0.4));
+      card.add(
+        this.add
+          .text(bw / 2, 168, unlocked ? (done ? '已通关 · 再战' : '新关卡') : '通过上一关解锁', { ...typography.caption, color: palette.bgDeep })
+          .setOrigin(0.5)
+          .setAlpha(unlocked ? 0.65 : 0.4),
+      );
+      const stars = this.save?.progress.stars[lv.id] ?? 0;
+      if (stars > 0) card.add(this.add.text(bw / 2, 205, '★'.repeat(stars), { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '20px', color: '#F2C14E' }).setOrigin(0.5));
+      // 命中区：场景级 zone（不进容器），与卡片同矩形
+      const hit = add(this.add.zone(bx, by, bw, bh).setOrigin(0, 0).setDepth(53).setInteractive({ useHandCursor: unlocked }));
+      hit.on('pointerover', () => unlocked && card.setScale(1.03));
+      hit.on('pointerout', () => card.setScale(1));
+      hit.on('pointerup', () => {
+        if (!unlocked) {
+          this.showHint(width / 2, by + bh + 40, '先通过上一关解锁（通关后自动解锁下一关）');
+          return;
+        }
+        const parsed = LevelDef.safeParse(lv);
+        if (!parsed.success) {
+          this.showHint(width / 2, by + bh + 40, '关卡数据校验失败（见控制台）');
+          console.error('[level] invalid', lv.id, parsed.error.issues);
+          return;
+        }
+        this.closeLevelPicker();
+        this.registry.set('level', parsed.data);
+        this.scene.start('Battle');
+      });
+    });
+
+    const closeX = px + pw - 40;
+    const closeY = py + 40;
+    const cg = add(this.add.graphics().setDepth(52));
+    cg.fillStyle(hexToInt(palette.bgDeep), 0.12);
+    cg.fillCircle(closeX, closeY, 22);
+    add(this.add.text(closeX, closeY, '✕', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '24px', fontStyle: 'bold', color: palette.bgDeep }).setOrigin(0.5).setDepth(52));
+    const closeHit = add(this.add.zone(closeX - 24, closeY - 24, 48, 48).setOrigin(0, 0).setDepth(53).setInteractive({ useHandCursor: true }));
+    closeHit.on('pointerup', () => this.closeLevelPicker());
+  }
+
+  private closeLevelPicker(): void {
+    for (const go of this.pickerParts) go.destroy();
+    this.pickerParts = [];
   }
 
   private showHint(x: number, y: number, msg: string): void {

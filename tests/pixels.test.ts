@@ -14,15 +14,38 @@ describe('pixel sprite data integrity', () => {
     }
   });
 
-  it('all 11 enemy sprites + 4 projectiles + 16 icons are valid', () => {
+  it('all 11 enemy sprites + 4 projectiles + 20 icons are valid', () => {
     expect(Object.keys(allEnemySprites)).toHaveLength(11);
     expect(Object.keys(allProjectileSprites)).toHaveLength(4);
-    expect(Object.keys(allPixelIcons)).toHaveLength(17);
+    expect(Object.keys(allPixelIcons)).toHaveLength(20);
     expect(allPixelIcons.lightdew).toBeDefined();
+    expect(allPixelIcons.gate).toBeDefined();
+    expect(allPixelIcons.flag).toBeDefined();
+    expect(allPixelIcons.shovel).toBeDefined();
     expect(PALETTE.x).toBeDefined(); // 铁甲深色（护甲四分层）
     const tables = { ...allEnemySprites, ...allProjectileSprites, ...allPixelIcons };
     for (const [name, sprite] of Object.entries(tables)) {
       expect(validatePixelSprite(name, sprite, keys)).toEqual([]);
+    }
+  });
+
+  it('key palette colors stay bright (user feedback #1/#2: 反"太暗"回归防线)', () => {
+    const lum = (hex: string): number => {
+      const c = hex.replace('#', '');
+      const f = (i: number) => {
+        const v = parseInt(c.slice(i, i + 2), 16) / 255;
+        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * f(0) + 0.7152 * f(2) + 0.0722 * f(4);
+    };
+    // 植株/草地/天空/资源主体必须保持明亮（阈值=相对亮度）
+    for (const key of ['M', 'L', 'h', 'v', 'o', 'S', 's', 'G', 'B']) {
+      expect(PALETTE[key], `palette ${key}`).toBeDefined();
+      expect(lum(PALETTE[key] as string)).toBeGreaterThan(0.35);
+    }
+    for (const key of ['E', 'F', 'X', 'g']) {
+      expect(PALETTE[key], `palette ${key}`).toBeDefined();
+      expect(lum(PALETTE[key] as string)).toBeGreaterThan(0.25);
     }
   });
 
@@ -39,7 +62,7 @@ describe('pixel sprite data integrity', () => {
     // 确定性：两次生成完全一致
     expect(meadowBattleBg()).toEqual(bg);
     // 内容 sanity：天空有色、地面是草色
-    expect(bg[10]?.[100]).not.toBe('.');
-    expect(bg[150]?.[160]).toMatch(/^[MLhd]$/);
+    expect(bg[10]?.[100]).toMatch(/^[SsW]$/);
+    expect(bg[150]?.[160]).toMatch(/^[vohd]$/);
   });
 });

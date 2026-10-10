@@ -1,6 +1,7 @@
 /**
  * 一次性工具：归一化像素矩阵到组固定尺寸（补/修剪尾部 '.' 透明像素，不动可见像素）。
  * 用法：node scripts/normalize-pixels.mjs
+ * 注意：单位矩阵的所有者是 scripts/gen-pixel-units.mjs（勿用本脚本覆盖其产出；本脚本只管敌人/子弹/图标）。
  */
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
