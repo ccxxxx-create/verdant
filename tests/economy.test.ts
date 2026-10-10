@@ -7,6 +7,8 @@ import { allUnits } from '../src/data/archetypes/index.ts';
 import { UNIT_ACQUISITION } from '../src/data/economy.ts';
 import { LevelDef } from '../src/core/schema/level.ts';
 import level11 from '../src/data/levels/meadow-1-1.json';
+import level12 from '../src/data/levels/meadow-1-2.json';
+import level13 from '../src/data/levels/meadow-1-3.json';
 
 const lv11 = LevelDef.parse(level11);
 
