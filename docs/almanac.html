@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Verdant 图鉴与数值（静态）</title>
+<style>
+  body { font: 14px/1.6 system-ui, "PingFang SC", sans-serif; background: #A5DFF7; color: #26402F; margin: 0; padding: 24px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 28px 0 8px; border-left: 6px solid #FFD34D; padding-left: 8px; }
+  .note { background: #FFF0C2; border: 2px solid #26402F; border-radius: 8px; padding: 10px 14px; max-width: 1100px; }
+  table { border-collapse: collapse; background: #fff; max-width: 1100px; box-shadow: 0 2px 0 #26402F; }
+  th, td { border: 1px solid #cde; padding: 5px 9px; text-align: left; vertical-align: top; }
+  th { background: #F5E9C8; position: sticky; top: 0; }
+  tr:nth-child(even) td { background: #F3FAF1; }
+  code { background: #E3D2A6; border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+<h1>Verdant 图鉴与数值总表</h1>
+<div class="note">
+本页由 <code>node scripts/gen-almanac.mjs</code> 从游戏同源数据生成（<code>src/data/**</code> + <code>src/core/balance.ts</code>）。<br>
+微调流程：改 <code>src/data/archetypes/**</code> 或 <code>src/core/balance.ts</code> 或 <code>src/data/economy.ts</code> → 重跑上面命令 → 刷新本页核对。<br>
+PvZ1 对标口径说明见 <code>docs/RESEARCH-PVZ.md</code>（开源移植参考，未经官方验证）。
+</div>
+
+<h2>一、角色（Units）</h2>
+<table><thead><tr><th>id</th><th>名称</th><th>职能</th><th>费用</th><th>冷却</th><th>HP</th><th>攻击</th><th>产出</th><th>渠道</th><th>价格</th><th>traits</th><th>特色</th></tr></thead>
+<tbody>
+<tr>
+<td>firefly_reed</td><td>灯心草</td><td>producer</td>
+<td>50</td><td>7500ms</td><td>300</td>
+<td>—</td><td>25 露 / 24s</td>
+<td>gift</td><td>赠送</td>
+<td></td><td>每 24 秒凝出 25 光露，一切布防的起点（PvZ1 口径）</td></tr>
+<tr>
+<td>twin_glow</td><td>双灯草</td><td>producer</td>
+<td>125</td><td>7500ms</td><td>300</td>
+<td>—</td><td>50 露 / 24s</td>
+<td>diamonds</td><td>5 钻石</td>
+<td></td><td>进阶产能单位，同节奏产出翻倍（50/24s），撑起中后期经济</td></tr>
+<tr>
+<td>thorn_pea</td><td>豆射手</td><td>attacker</td>
+<td>100</td><td>7500ms</td><td>300</td>
+<td>20 伤 / 1.43s</td><td>—</td>
+<td>gift</td><td>赠送</td>
+<td></td><td>最可靠的直线射手，一发 20 点，防线开路先锋</td></tr>
+<tr>
+<td>trifold_arrow</td><td>三叶箭</td><td>attacker</td>
+<td>300</td><td>7500ms</td><td>300</td>
+<td>20 伤 / 1.43s ×3</td><td>—</td>
+<td>coins</td><td>750 金币</td>
+<td>vs_shell_efficient</td><td>三连发直线射击，壳甲敌人的噩梦</td></tr>
+<tr>
+<td>frost_pea</td><td>冰豆</td><td>attacker</td>
+<td>175</td><td>7500ms</td><td>300</td>
+<td>20 伤 / 1.43s / ice</td><td>—</td>
+<td>gift</td><td>赠送</td>
+<td>slow</td><td>冰弹命中减速 40%，专拖突进怪的脚步</td></tr>
+<tr>
+<td>ember_fluff</td><td>火豆</td><td>attacker</td>
+<td>175</td><td>7500ms</td><td>300</td>
+<td>35 伤 / 1.6s / fire</td><td>—</td>
+<td>coins</td><td>900 金币</td>
+<td>burns, spreads_grass</td><td>火弹点燃草格蔓延，冰原关里还能烧穿冰面</td></tr>
+<tr>
+<td>drum_cap</td><td>炸弹菇</td><td>attacker</td>
+<td>25</td><td>50000ms</td><td>300</td>
+<td>1800 伤 / 1.4s</td><td>—</td>
+<td>coins</td><td>500 金币</td>
+<td>burrowed, ground_only, one_shot</td><td>埋地 14 秒后炸翻一小片，廉价的清群手段</td></tr>
+<tr>
+<td>wood_core</td><td>木墩</td><td>defender</td>
+<td>50</td><td>30000ms</td><td>4000</td>
+<td>—</td><td>—</td>
+<td>gift</td><td>赠送</td>
+<td>wall</td><td>4000 血肉盾，替你挡下啃咬，为后排放输出时间</td></tr>
+<tr>
+<td>lob_shroom</td><td>雾菇</td><td>attacker</td>
+<td>150</td><td>7500ms</td><td>300</td>
+<td>25 伤 / 2s ×2</td><td>—</td>
+<td>coins</td><td>1000 金币</td>
+<td>vs_air, lobs_over_cover</td><td>抛射越过草丛，专打飞行与高台目标</td></tr>
+<tr>
+<td>storm_cap</td><td>闪电菇</td><td>attacker</td>
+<td>300</td><td>7500ms</td><td>300</td>
+<td>45 伤 / 2.5s / electric</td><td>—</td>
+<td>coins</td><td>1200 金币</td>
+<td>aoe_3x3</td><td>3×3 落雷范围伤害，水格连锁的核心</td></tr>
+<tr>
+<td>tether_moss</td><td>藤蔓</td><td>support</td>
+<td>175</td><td>7500ms</td><td>300</td>
+<td>—</td><td>—</td>
+<td>diamonds</td><td>6 钻石</td>
+<td>ground_only</td><td>一根藤索定身 4 秒，救场与控制位</td></tr>
+<tr>
+<td>nectar_moss</td><td>蜜草</td><td>support</td>
+<td>100</td><td>7500ms</td><td>300</td>
+<td>—</td><td>—</td>
+<td>coins</td><td>800 金币</td>
+<td></td><td>花香光环：周围同伴攻速 +20%</td></tr>
+<tr>
+<td>mist_lamp</td><td>雾灯</td><td>support</td>
+<td>25</td><td>15000ms</td><td>300</td>
+<td>—</td><td>—</td>
+<td>diamonds</td><td>8 钻石</td>
+<td>anti_cover</td><td>驱散高草遮挡，让投掷系百发百中</td></tr>
+</tbody></table>
+
+<h2>二、敌人（Enemies）</h2>
+<table><thead><tr><th>id</th><th>名称</th><th>HP</th><th>速度(格/秒)</th><th>横穿 1 格</th><th>啃咬</th><th>护甲</th><th>波次点数</th><th>traits</th><th>特色</th></tr></thead>
+<tbody>
+<tr>
+<td>march_ant</td><td>行蚁</td><td>45</td>
+<td>0.21</td><td>4.8s/格</td>
+<td>4</td><td>cloth ×1</td>
+<td>1</td><td></td><td>最基础的先锋，数量就是它的威胁</td></tr>
+<tr>
+<td>iron_beak_sparrow</td><td>铁喙雀</td><td>70</td>
+<td>0.3</td><td>3.3s/格</td>
+<td>4</td><td>cloth ×1</td>
+<td>3</td><td>flying</td><td>掠过植株直扑篱门，火力覆盖够密才能拦下它</td></tr>
+<tr>
+<td>gnaw_back_rat</td><td>啮背鼠</td><td>90</td>
+<td>0.23</td><td>4.3s/格</td>
+<td>6</td><td>hide ×0.85</td>
+<td>2</td><td>gnaw_pause</td><td>路过生产位会停下来啃一口再走</td></tr>
+<tr>
+<td>grey_tide_swarm</td><td>灰潮群</td><td>50</td>
+<td>0.26</td><td>3.8s/格</td>
+<td>4</td><td>cloth ×1</td>
+<td>1</td><td>swarm</td><td>一波四五只结伴而来，用爆炸款待它们</td></tr>
+<tr>
+<td>vine_boa</td><td>藤蟒</td><td>170</td>
+<td>0.14</td><td>7.1s/格</td>
+<td>8</td><td>cloth ×1</td>
+<td>5</td><td>slow_immune</td><td>无视减速缓慢推进，硬控拦不住它</td></tr>
+<tr>
+<td>web_spider</td><td>织网蛛</td><td>150</td>
+<td>0.18</td><td>5.6s/格</td>
+<td>6</td><td>cloth ×1</td>
+<td>3</td><td>web_stun</td><td>吐网定住最近的防守单位，先手很烦</td></tr>
+<tr>
+<td>shell_raiser</td><td>举壳兵</td><td>280</td>
+<td>0.18</td><td>5.6s/格</td>
+<td>8</td><td>shell ×0.7</td>
+<td>6</td><td>shell_block_front</td><td>壳挡正面弹道，绕后或抛投才能破</td></tr>
+<tr>
+<td>vine_gnawer</td><td>啃藤兽</td><td>200</td>
+<td>0.23</td><td>4.3s/格</td>
+<td>9</td><td>hide ×0.85</td>
+<td>4</td><td>targets_attackers</td><td>专挑攻击单位啃，不清完不停口</td></tr>
+<tr>
+<td>lightdew_moth</td><td>吮光蛾</td><td>110</td>
+<td>0.26</td><td>3.8s/格</td>
+<td>6</td><td>cloth ×1</td>
+<td>2</td><td>eats_drops</td><td>飞过掉落物时一口吞掉，手慢无</td></tr>
+<tr>
+<td>stone_hide_beast</td><td>石皮兽</td><td>380</td>
+<td>0.11</td><td>9.1s/格</td>
+<td>10</td><td>iron ×0.55</td>
+<td>8</td><td>fire_resist</td><td>铁甲慢步还带火抗，钝击系的活靶子</td></tr>
+<tr>
+<td>stone_hide_giant</td><td>石皮巨兽</td><td>4000</td>
+<td>0.09</td><td>11.1s/格</td>
+<td>14</td><td>shell ×0.7</td>
+<td>0</td><td>summon, fire_resist</td><td>草原之主：高甲低速，召唤蚁群补线</td></tr>
+</tbody></table>
+
+<h2>三、关卡（Levels）</h2>
+<table><thead><tr><th>id</th><th>模板</th><th>波数</th><th>起步光露</th><th>亮相池</th><th>通关赠送</th><th>星级条件</th><th>地形</th></tr></thead>
+<tbody>
+<tr>
+<td>meadow-1-1</td><td>teach</td><td>10</td><td>50</td>
+<td>march_ant</td><td>firefly_reed, thorn_pea</td><td>none</td>
+<td>{"waterColumns":[],"brokenCells":[],"iceColumns":[],"wind":"none"}</td></tr>
+<tr>
+<td>meadow-1-2</td><td>normal</td><td>12</td><td>50</td>
+<td>march_ant, grey_tide_swarm</td><td>firefly_reed, thorn_pea, wood_core</td><td>none</td>
+<td>{"waterColumns":[],"brokenCells":[],"iceColumns":[],"wind":"none"}</td></tr>
+<tr>
+<td>meadow-1-3</td><td>normal</td><td>12</td><td>50</td>
+<td>march_ant, grey_tide_swarm, gnaw_back_rat</td><td>firefly_reed, thorn_pea, wood_core, frost_pea</td><td>none</td>
+<td>{"waterColumns":[],"brokenCells":[],"iceColumns":[],"wind":"none"}</td></tr>
+<tr>
+<td>meadow-1-4</td><td>normal</td><td>14</td><td>50</td>
+<td>march_ant, iron_beak_sparrow, gnaw_back_rat</td><td>firefly_reed, thorn_pea, wood_core, frost_pea, trifold_arrow</td><td>none</td>
+<td>{"waterColumns":[],"brokenCells":[],"iceColumns":[],"wind":"none"}</td></tr>
+<tr>
+<td>meadow-1-5</td><td>normal</td><td>14</td><td>50</td>
+<td>march_ant, grey_tide_swarm, iron_beak_sparrow, vine_boa</td><td>firefly_reed, thorn_pea, wood_core, frost_pea, trifold_arrow, ember_fluff</td><td>none</td>
+<td>{"waterColumns":[],"brokenCells":[],"iceColumns":[],"wind":"none"}</td></tr>
+<tr>
+<td>meadow-4-1</td><td>conveyor</td><td>20</td><td>0</td>
+<td>march_ant, grey_tide_swarm, iron_beak_sparrow</td><td>—</td><td>deck_le6</td>
+<td>—</td></tr>
+</tbody></table>
+
+<h2>四、经济（Economy）</h2>
+<table><thead><tr><th>项目</th><th>规则</th></tr></thead>
+<tbody>
+<tr><td>金币获取</td><td>通关 20/40/60 金币（按星级）</td></tr>
+<tr><td>金币获取</td><td>重打=首通×0.5（向下取整）</td></tr>
+<tr><td>金币获取</td><td>抽奖掉落（40%）/重复角色折算 250</td></tr>
+<tr><td>钻石获取</td><td>首次通关三星 +2</td></tr>
+<tr><td>钻石获取</td><td>Boss 首杀 +5（M3 接入）/抽奖掉落（9%）</td></tr>
+<tr><td>种子获取</td><td>星星里程碑：10★→1 / 20★→2 / 30★→3</td></tr>
+<tr><td>种子获取</td><td>Boss 首杀 +2（M3）/抽奖掉落（28%）</td></tr>
+<tr><td>能量豆</td><td>每次通关 +1；抽奖 15%</td></tr>
+<tr><td>抽奖单价</td><td>种子券单抽 ×1；钻石十连 ×10（必出未拥有角色）</td></tr>
+<tr><td>角色渠道</td><td>4 赠送（ firefly_reed / thorn_pea / wood_core / frost_pea ）+ 6 金币购 + 3 钻石购</td></tr>
+</tbody></table>
+
+<h2>五、抽奖概率（Gacha）</h2>
+<table><thead><tr><th>奖品</th><th>权重</th><th>数量</th></tr></thead>
+<tbody>
+<tr><td>coins</td><td>40%</td><td>100</td></tr>
+<tr><td>seeds</td><td>28%</td><td>1</td></tr>
+<tr><td>plantFood</td><td>15%</td><td>1</td></tr>
+<tr><td>diamonds</td><td>9%</td><td>1</td></tr>
+<tr><td>unit</td><td>8%</td><td>0</td></tr>
+</tbody></table>
+
+<h2>六、平衡参数（Balance · 单一事实源）</h2>
+<table><thead><tr><th>参数</th><th>当前值</th></tr></thead>
+<tbody>
+<tr><td>护甲减伤</td><td>布 1 / 皮 0.85 / 壳 0.7 / 铁 0.55</td></tr>
+<tr><td>首波等待</td><td>teach 20s / 普通 14s</td></tr>
+<tr><td>波间隔</td><td>teach 16s / 普通 12s</td></tr>
+<tr><td>波内出生间隔</td><td>teach 2.2s / 普通 1.8s</td></tr>
+<tr><td>波预算</td><td>round(6 × (1 + w×0.3) × 模板缩放 × 终波×2.5)</td></tr>
+<tr><td>模板缩放</td><td>teach 0.35 / 普通 1</td></tr>
+<tr><td>天空阳光</td><td>首枚 5s，之后 9.5~11.5s 一枚，值 25，停留 14s</td></tr>
+<tr><td>产出节奏</td><td>向日葵系 25/24s（PvZ1 口径）</td></tr>
+<tr><td>攻击节奏</td><td>豌豆系 20 伤 / 1.43s（PvZ1 口径）</td></tr>
+<tr><td>敌人速度</td><td>普通 0.21 格/秒 ≈ 4.7s/格（PvZ1 口径）</td></tr>
+<tr><td>起步光露</td><td>50（PvZ1 口径）</td></tr>
+<tr><td>冷却表</td><td>豌豆系 7.5s / 坚果 30s / 樱桃 50s（PvZ1 口径）</td></tr>
+</tbody></table>
+</body>
+</html>

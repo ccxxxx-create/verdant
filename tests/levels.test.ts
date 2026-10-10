@@ -17,7 +17,7 @@ describe('level definitions parse against schema', () => {
       if (!r.success) return;
       expect(r.data.id).toBe(`meadow-1-${i + 1}`);
       expect(r.data.waves).toBeGreaterThan(0);
-      expect(r.data.startingLight).toBeGreaterThanOrEqual(100); // 反馈#4：起步经济不卡死
+      expect(r.data.startingLight).toBeGreaterThanOrEqual(50); // M2：PvZ1 口径起步 50
       expect(r.data.unlockUnits.length).toBeGreaterThan(0); // 卡组非空
       expect(r.data.pool.length).toBeGreaterThan(0);
       expect(r.data.terrain.waterColumns).toEqual([]);
@@ -37,7 +37,7 @@ describe('level definitions parse against schema', () => {
     if (r.success) {
       expect(r.data.template).toBe('teach');
       expect(r.data.waves).toBe(10);
-      expect(r.data.startingLight).toBe(150);
+      expect(r.data.startingLight).toBe(50); // M2：PvZ1 口径
       expect(r.data.pool).toEqual(['march_ant']);
     }
   });

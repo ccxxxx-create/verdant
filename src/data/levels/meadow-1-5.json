@@ -26,6 +26,6 @@
     "ember_fluff"
   ],
   "starCondition": "none",
-  "startingLight": 175,
+  "startingLight": 50,
   "plantFood": true
 }

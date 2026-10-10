@@ -23,6 +23,6 @@
     "frost_pea"
   ],
   "starCondition": "none",
-  "startingLight": 125,
+  "startingLight": 50,
   "plantFood": true
 }

@@ -99,6 +99,18 @@ export class MenuScene extends Phaser.Scene {
     // 资源：星星 + 图鉴完成度
     bar.add(this.add.text(width - 380, 30, `★ 星星 ${stars}`, { ...typography.body, color: palette.bgDeep }));
     bar.add(this.add.text(width - 380, 60, `📖 图鉴 ${unlocked}/${TOTAL_UNITS}（${completion}%）`, { ...typography.caption, color: palette.bgDeep }).setAlpha(0.7));
+    // M2 钱包（金币/钻石/种子/能量豆）
+    if (save) {
+      const w = save.wallet;
+      bar.add(this.add.image(width - 352, 80, 'icon_coin').setDisplaySize(22, 22));
+      bar.add(this.add.text(width - 334, 80, `×${w.coins}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
+      bar.add(this.add.image(width - 262, 80, 'icon_diamond').setDisplaySize(22, 22));
+      bar.add(this.add.text(width - 244, 80, `×${w.diamonds}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
+      bar.add(this.add.image(width - 172, 80, 'icon_seed').setDisplaySize(22, 22));
+      bar.add(this.add.text(width - 154, 80, `×${w.seeds}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
+      bar.add(this.add.image(width - 82, 80, 'icon_energy').setDisplaySize(22, 22));
+      bar.add(this.add.text(width - 64, 80, `×${w.plantFood}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
+    }
   }
 
   // —— 中央：巡野图入口大卡 ——
@@ -153,11 +165,11 @@ export class MenuScene extends Phaser.Scene {
 
   // —— 模式入口行 ——
   private drawModeRow(width: number): void {
-    const modes: { label: string; sub: string; color: string; ready: boolean; icon: string; action: 'battle' | 'codex' | 'hint' }[] = [
+    const modes: { label: string; sub: string; color: string; ready: boolean; icon: string; action: 'battle' | 'codex' | 'shop' | 'draw' | 'hint' }[] = [
       { label: '冒险', sub: '晨雾草原 · 前 5 关', color: palette.primary, ready: true, icon: 'sprout', action: 'battle' },
       { label: '图鉴', sub: '51 生灵 / 44 怪兽', color: palette.accent, ready: true, icon: 'book', action: 'codex' },
-      { label: '竞技场', sub: 'M6 规划中', color: palette.reef, ready: false, icon: 'skull', action: 'hint' },
-      { label: '每日挑战', sub: 'BACKLOG', color: palette.sky, ready: false, icon: 'calendar', action: 'hint' },
+      { label: '商店', sub: '金币 / 钻石购买角色', color: palette.reef, ready: true, icon: 'coin', action: 'shop' },
+      { label: '抽奖', sub: '种子券单抽 · 钻石十连', color: palette.sky, ready: true, icon: 'seed', action: 'draw' },
     ];
     const bw = 360;
     const bh = 150;
@@ -192,6 +204,14 @@ export class MenuScene extends Phaser.Scene {
       hit.on('pointerup', () => {
         if (m.action === 'codex') {
           this.scene.start('Codex');
+          return;
+        }
+        if (m.action === 'shop') {
+          this.scene.start('Shop');
+          return;
+        }
+        if (m.action === 'draw') {
+          this.scene.start('Draw');
           return;
         }
         if (m.action === 'battle') {

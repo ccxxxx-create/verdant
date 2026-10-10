@@ -24,6 +24,6 @@
     "trifold_arrow"
   ],
   "starCondition": "none",
-  "startingLight": 150,
+  "startingLight": 50,
   "plantFood": true
 }

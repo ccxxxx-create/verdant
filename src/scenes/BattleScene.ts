@@ -4,6 +4,9 @@ import type { LevelDef } from '../core/schema/level.ts';
 import { registryFrom } from '../core/registry.ts';
 import { producerTick } from '../core/economy.ts';
 import { readSave, writeSave } from '../core/save.ts';
+import type { SaveGame } from '../core/schema/save.ts';
+import { levelClearReward } from '../core/rewards.ts';
+import { ARMOR_MULT, SKY_SUN, SPEED_TOGGLE, WAVE_PACING } from '../core/balance.ts';
 import { Rng } from '../core/rng.ts';
 import { allEnemies, allUnits } from '../data/archetypes/index.ts';
 import { meadowBattleBg } from '../data/pixels/bg/meadow.ts';
@@ -34,16 +37,6 @@ import {
   enemyFeetY,
   pointerToCell,
 } from './battleGeometry.ts';
-
-/** 护甲减伤系数（GDD §6.2：布 0/皮 15%/壳 30%/铁 45%）。 */
-const ARMOR_MULT: Record<string, number> = { cloth: 1, hide: 0.85, shell: 0.7, iron: 0.55 };
-
-/** 难度节奏（M1C 调参：反馈#4 难度过高——首波推迟/波间拉长/亮相限流）。 */
-const FIRST_WAVE_S: Record<string, number> = { teach: 20, normal: 14 };
-const BETWEEN_WAVES_S: Record<string, number> = { teach: 16, normal: 12 };
-const SPAWN_INTERVAL_S: Record<string, number> = { teach: 2.2, normal: 1.8 };
-const WAVE_SCALE: Record<string, number> = { teach: 0.35, normal: 1 };
-const FIRST_WAVE_DEFAULT_S = 14;
 
 const CARD_W = 112;
 const CARD_H = 128;
@@ -134,10 +127,11 @@ export function ensurePixelTextures(scene: Phaser.Scene): void {
  * 战斗场景（M1C）：PvZ 式布局 + 明亮草原。
  * 布局：顶部信息条(0-108) → 水平种子卡条(108-256) → 6×9 草坪(272-1040) → 左侧篱门。
  * 反馈闭环：#3 点击=格心+幽灵预览；#5 UI 与草坪零重叠；#6 参考 PvZ；#7 光露从天而降。
- * 打击感：闪白/挤压/碎屑/飘字/伤害数字/波次横幅/终波震屏/篱门拦截。
+ * 打击感：闪白/挤压/碎屑/飘字/伤害数字/波次横幅/终波震屏/小推车拦截。
  */
 export class BattleScene extends Phaser.Scene {
   private level: LevelDef;
+  private save?: SaveGame;
   private archetypes = registryFrom(allUnits, allEnemies);
   private rng = new Rng(0x5eed);
   private units: UnitInst[] = [];
@@ -150,7 +144,7 @@ export class BattleScene extends Phaser.Scene {
   private inWave = false;
   private spawnQueue: { id: string; row: number }[] = [];
   private spawnTimer = 0;
-  private dropTimer = 4.5;
+  private dropTimer: number = SKY_SUN.firstS; // PvZ1：首枚约 5s
   private speed = 1;
   private state: 'playing' | 'won' | 'lost' = 'playing';
   private paused = false;
@@ -184,6 +178,7 @@ export class BattleScene extends Phaser.Scene {
   create(): void {
     const injected = this.registry.get('level') as LevelDef | undefined;
     if (injected) this.level = injected;
+    this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     this.resetState();
     ensurePixelTextures(this);
     this.input.mouse?.disableContextMenu();
@@ -219,7 +214,7 @@ export class BattleScene extends Phaser.Scene {
     this.cards = [];
     this.lightdew = this.level.startingLight;
     this.wave = 0;
-    this.waveTimer = FIRST_WAVE_S[this.level.template] ?? FIRST_WAVE_DEFAULT_S;
+    this.waveTimer = WAVE_PACING.firstWave[this.level.template] ?? WAVE_PACING.firstWave.default ?? 14;
     this.inWave = false;
     this.spawnTimer = 0;
     this.dropTimer = 4.5;
@@ -274,7 +269,7 @@ export class BattleScene extends Phaser.Scene {
   /** 篱门（割草机式一次性护盾，PvZ 参考反馈#6）；消耗时图像随之消失。 */
   private drawGates(): void {
     for (let r = 0; r < ROWS; r++) {
-      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_gate').setScale(3);
+      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_mower').setScale(3); // PvZ 式小推车（用户反馈#3 重画）
     }
   }
 
@@ -363,9 +358,12 @@ export class BattleScene extends Phaser.Scene {
     g.lineBetween(0, SEED_BAR_Y, 1920, SEED_BAR_Y);
     g.lineBetween(0, SEED_BAR_Y + SEED_BAR_H, 1920, SEED_BAR_Y + SEED_BAR_H);
 
-    const defaultDeck = ['firefly_reed', 'thorn_pea', 'frost_pea', 'ember_fluff', 'wood_core'];
-    const deckIds = this.level.unlockUnits.length > 0 ? this.level.unlockUnits : defaultDeck;
-    const deck = deckIds.map((id) => this.archetypes.unitById.get(id)).filter((u): u is UnitArchetype => !!u);
+    // M2 卡组=玩家拥有角色（商店/抽奖/关卡赠送均汇入 save.progress.unlockedUnits）
+    const owned = this.save?.progress.unlockedUnits.length ? this.save.progress.unlockedUnits : ['firefly_reed', 'thorn_pea'];
+    const deck = owned
+      .map((id) => this.archetypes.unitById.get(id))
+      .filter((u): u is UnitArchetype => !!u)
+      .slice(0, 8); // 种子槽上限 8（PvZ 卡栏口径）
     this.cards = [];
     this.selFrame = this.add.graphics().setDepth(12);
     deck.forEach((u, i) => {
@@ -512,7 +510,7 @@ export class BattleScene extends Phaser.Scene {
 
   private toggleSpeed(): void {
     if (this.state !== 'playing') return;
-    this.speed = this.speed === 1 ? 2 : 1;
+    this.speed = this.speed === 1 ? SPEED_TOGGLE : 1;
     this.tweens.timeScale = this.speed;
     this.speedText?.setText(`${this.speed}× 速度`);
   }
@@ -620,7 +618,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.spawnQueue.length > 0 && this.spawnTimer <= 0) {
       const item = this.spawnQueue.shift();
       if (item) this.spawnEnemy(item.id, item.row);
-      this.spawnTimer = SPAWN_INTERVAL_S[this.level.template] ?? 1.8;
+      this.spawnTimer = WAVE_PACING.spawnInterval[this.level.template] ?? WAVE_PACING.spawnInterval.default ?? 1.8;
     }
     if (this.spawnQueue.length === 0 && this.enemies.length === 0) {
       this.inWave = false;
@@ -628,14 +626,14 @@ export class BattleScene extends Phaser.Scene {
         this.winLevel();
         return;
       }
-      this.waveTimer = BETWEEN_WAVES_S[this.level.template] ?? 12;
+      this.waveTimer = WAVE_PACING.betweenWaves[this.level.template] ?? WAVE_PACING.betweenWaves.default ?? 12;
     }
   }
 
   private startWave(): void {
-    const scale = WAVE_SCALE[this.level.template] ?? 1;
+    const scale = WAVE_PACING.scale[this.level.template] ?? WAVE_PACING.scale.default ?? 1;
     const isFinal = this.wave + 1 === this.level.waves;
-    const budget = Math.max(1, Math.round(6 * (1 + (this.wave + 1) * 0.3) * scale * (isFinal ? 2.5 : 1)));
+    const budget = Math.max(1, Math.round(WAVE_PACING.base * (1 + (this.wave + 1) * WAVE_PACING.growth) * scale * (isFinal ? WAVE_PACING.finalWaveMult : 1)));
     const pool = this.level.pool.map((id) => this.archetypes.enemyById.get(id)).filter((e): e is EnemyArchetype => !!e);
     if (pool.length === 0) {
       // 数据错误 fail-fast：绝不放空波让其"零战斗通关"发 3 星（审查 P1-4）
@@ -775,11 +773,11 @@ export class BattleScene extends Phaser.Scene {
       if (e.x < GATE_X + 20) {
         const gate = this.gates[e.row];
         if (gate) {
-          // 篱门拦截：一次性护盾（割草机式，反馈#6/#4），消耗后图标消失
+          // 小推车拦截：一次性护盾（割草机式，反馈#6/#4），消耗后图标消失
           gate.destroy();
           this.gates[e.row] = null;
           this.cameras.main.flash(160, 255, 220, 120);
-          this.floatText(GATE_X + 60, cellY(e.row) - 30, '篱门拦截！', C_CREAM);
+          this.floatText(GATE_X + 60, cellY(e.row) - 30, '小推车出动！', C_CREAM);
           this.debris(GATE_X + 20, cellY(e.row), 'n', 10);
           this.killEnemy(i);
           continue;
@@ -1007,17 +1005,25 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  /** 通关写档：clearedLevels/stars/unlockedUnits/kills（localStorage）。 */
-  private persistProgress(stars: number): void {
+  /** 通关写档：clearedLevels/stars/赠送角色/钱包奖励/wins（localStorage）。 */
+  private persistProgress(stars: 1 | 2 | 3): void {
     try {
       const save = readSave(window.localStorage);
+      const previousStars = save.progress.stars[this.level.id] ?? null;
+      const totalStarsBefore = Object.values(save.progress.stars).reduce((a, b) => a + b, 0);
       if (!save.progress.clearedLevels.includes(this.level.id)) {
         save.progress.clearedLevels.push(this.level.id);
       }
-      save.progress.stars[this.level.id] = Math.max(save.progress.stars[this.level.id] ?? 0, stars);
+      save.progress.stars[this.level.id] = Math.max(previousStars ?? 0, stars);
       for (const id of this.level.unlockUnits) {
         if (!save.progress.unlockedUnits.includes(id)) save.progress.unlockedUnits.push(id);
       }
+      // M2 经济：金币（星级梯度/重打减半）+ 首三星钻石 + 里程碑种子 + 能量豆
+      const reward = levelClearReward({ level: this.level, stars, previousStars, totalStarsBefore });
+      save.wallet.coins += reward.coins;
+      save.wallet.diamonds += reward.diamonds;
+      save.wallet.seeds += reward.seeds;
+      save.wallet.plantFood += reward.plantFood;
       save.stats.wins += 1;
       writeSave(window.localStorage, save);
       this.registry.set('save', save);
