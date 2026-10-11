@@ -6,8 +6,18 @@ import level13 from '../src/data/levels/meadow-1-3.json';
 import level14 from '../src/data/levels/meadow-1-4.json';
 import level15 from '../src/data/levels/meadow-1-5.json';
 import level41 from '../src/data/levels/meadow-4-1.json';
+import { ALL_LEVELS } from '../src/data/levels/index.ts';
 
 const MEADOW_1 = [level11, level12, level13, level14, level15];
+
+describe('levels/index 批量导入', () => {
+  it('ALL_LEVELS numeric 排序 = 巡野图解锁链顺序，且与目录一致', () => {
+    const ids = ALL_LEVELS.map((l) => l.id);
+    expect(ids).toEqual([...ids].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
+    expect(ids[0]).toBe('meadow-1-1');
+    expect(ids).toContain('meadow-4-1');
+  });
+});
 
 describe('level definitions parse against schema', () => {
   it('meadow 1-1..1-5 all parse and stay progression-consistent (M1C 前 5 关)', () => {
