@@ -45,6 +45,9 @@ export class DrawScene extends Phaser.Scene {
 
   create(): void {
     ensurePixelTextures(this);
+    // lastPrizes 仅在同场景 restart（抽完刷新）保留；离开场景后再进则清空回空态
+    if (!this.registry.get('drawKeepResult')) this.lastPrizes = [];
+    this.registry.remove('drawKeepResult');
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     const { width } = this.scale.gameSize;
     drawPixelBackdrop(this);
@@ -183,6 +186,7 @@ export class DrawScene extends Phaser.Scene {
     const prizes = [rollOnce(this.rng, save.progress.unlockedUnits)];
     this.applyPrizes(prizes);
     this.lastPrizes = prizes;
+    this.registry.set('drawKeepResult', true);
     this.scene.restart();
   }
 
@@ -194,6 +198,7 @@ export class DrawScene extends Phaser.Scene {
     const prizes = rollTen(this.rng, save.progress.unlockedUnits);
     this.applyPrizes(prizes);
     this.lastPrizes = prizes;
+    this.registry.set('drawKeepResult', true);
     this.scene.restart();
   }
 }

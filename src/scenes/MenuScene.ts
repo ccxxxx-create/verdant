@@ -9,7 +9,7 @@ import { allUnits } from '../data/archetypes/index.ts';
 import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
 import { ensurePixelTextures } from './BattleScene.ts';
-import { drawPixelBackdrop, pixelPanel, pixelButton, sceneEnter, breathe, pressable, KIT } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelPanel, sceneEnter, breathe, pressable, KIT } from '../ui/components/kit.ts';
 import level11 from '../data/levels/meadow-1-1.json';
 import level12 from '../data/levels/meadow-1-2.json';
 import level13 from '../data/levels/meadow-1-3.json';
@@ -104,14 +104,14 @@ export class MenuScene extends Phaser.Scene {
     // M2 钱包（金币/钻石/种子/能量豆）
     if (save) {
       const w = save.wallet;
-      bar.add(this.add.image(width - 352, 80, 'icon_coin').setDisplaySize(22, 22));
-      bar.add(this.add.text(width - 334, 80, `×${w.coins}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
-      bar.add(this.add.image(width - 262, 80, 'icon_diamond').setDisplaySize(22, 22));
-      bar.add(this.add.text(width - 244, 80, `×${w.diamonds}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
-      bar.add(this.add.image(width - 172, 80, 'icon_seed').setDisplaySize(22, 22));
-      bar.add(this.add.text(width - 154, 80, `×${w.seeds}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
-      bar.add(this.add.image(width - 82, 80, 'icon_energy').setDisplaySize(22, 22));
-      bar.add(this.add.text(width - 64, 80, `×${w.plantFood}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
+      bar.add(this.add.image(width - 472, 80, 'icon_coin').setDisplaySize(22, 22));
+      bar.add(this.add.text(width - 454, 80, `×${w.coins}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
+      bar.add(this.add.image(width - 382, 80, 'icon_diamond').setDisplaySize(22, 22));
+      bar.add(this.add.text(width - 364, 80, `×${w.diamonds}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
+      bar.add(this.add.image(width - 292, 80, 'icon_seed').setDisplaySize(22, 22));
+      bar.add(this.add.text(width - 274, 80, `×${w.seeds}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
+      bar.add(this.add.image(width - 202, 80, 'icon_energy').setDisplaySize(22, 22));
+      bar.add(this.add.text(width - 184, 80, `×${w.plantFood}`, { ...typography.caption, color: palette.bgDeep }).setOrigin(0, 0.5));
     }
   }
 
@@ -155,8 +155,7 @@ export class MenuScene extends Phaser.Scene {
     const hit = this.add.zone(0, 0, cw, ch).setOrigin(0, 0);
     card.add(hit);
     hit.setInteractive({ useHandCursor: true });
-    hit.on('pointerover', () => card.setScale(1.01));
-    hit.on('pointerout', () => card.setScale(1));
+    void hit;
     hit.on('pointerup', () => this.showHint(cx + cw / 2, cy + ch + 34, '巡野图（关卡地图）在 M2 开放 · DEV-PLAN §5'));
   }
 
@@ -177,7 +176,6 @@ export class MenuScene extends Phaser.Scene {
       const btn = pixelPanel(this, startX + i * (bw + gap), y, bw, bh, { depth: 2, stroke: hexToInt(m.ready ? m.color : KIT.outlineCss), shadow: m.ready });
       if (!m.ready) btn.setAlpha(0.55);
       const hit = this.add.zone(startX + i * (bw + gap), y, bw, Math.max(bh, 48)).setOrigin(0, 0).setDepth(3).setInteractive({ useHandCursor: m.ready });
-      this.pickerParts.push(hit);
       pressable(this, hit, btn, m.ready);
       btn.add(this.add.image(bw / 2, 46, `icon_${(m.icon ?? 'sprout')}`).setDisplaySize(48, 48));
       btn.add(
@@ -233,7 +231,6 @@ export class MenuScene extends Phaser.Scene {
         .setAlpha(0.85)
         .setDepth(3);
       const hit = this.add.zone(startX + i * (bw + gap), y, bw, 56).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
-      this.pickerParts.push(hit);
       hit.on('pointerup', () => this.showHint(width / 2, y - 28, it.msg));
     });
 

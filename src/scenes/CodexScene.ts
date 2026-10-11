@@ -79,7 +79,7 @@ export class CodexScene extends Phaser.Scene {
     const startX = 60;
     this.tabChips = ids.map((id, i) => {
       const x = startX + i * (chipW + gap);
-      const chip = this.add.container(x, 132);
+      const chip = this.add.container(x, 132).setDepth(10);
       const g = this.add.graphics();
       const active = this.tab === id;
       g.fillStyle(KIT.shadow, 0.3);
@@ -118,6 +118,7 @@ export class CodexScene extends Phaser.Scene {
     this.scrollY = 0;
     const content = this.add.container(0, 0);
     this.content = content;
+    this.setupScroll(content, 0); // 非滚动 tab 重置（P1：残留 scrollMax 会拖出空腔）
     switch (this.tab) {
       case 'units':
         this.renderGrid(content, width);
@@ -227,7 +228,7 @@ export class CodexScene extends Phaser.Scene {
       g.fillStyle(KIT.paper, 0.97);
       g.fillRoundedRect(0, 0, cardW, cardH, 6);
       g.lineStyle(3, Phaser.Display.Color.HexStringToColor(col2).color, 1);
-      g.strokeRoundedRect(0, 0, cardW, cardH, radius.lg);
+      g.strokeRoundedRect(0, 0, cardW, cardH, 6);
       card.add(g);
       card.add(this.add.image(88, 92, `world_${w.id}`).setDisplaySize(96, 96));
       card.add(this.add.text(168, 60, w.name, { ...typography.heading, color: palette.bgDeep }));
@@ -259,7 +260,7 @@ export class CodexScene extends Phaser.Scene {
       g.fillStyle(KIT.paper, 0.97);
       g.fillRoundedRect(0, 0, cardW, cardH, 6);
       g.lineStyle(3, Phaser.Display.Color.HexStringToColor(palette.primaryDeep).color, 1);
-      g.strokeRoundedRect(0, 0, cardW, cardH, radius.lg);
+      g.strokeRoundedRect(0, 0, cardW, cardH, 6);
       card.add(g);
       card.add(
         this.add
@@ -327,6 +328,7 @@ export class CodexScene extends Phaser.Scene {
     close.setSize(64, 48);
     close.setInteractive({ useHandCursor: true });
     close.on('pointerup', () => {
+      this.tweens.killAll(); // 详情立绘 idleBreathe repeat:-1 随弹层终止（P2-9 泄漏修复）
       dim.destroy();
       panel.destroy(true);
     });
@@ -394,6 +396,11 @@ export class CodexScene extends Phaser.Scene {
     });
     panel.add(this.add.text(rx, py + 620, '克制关系见「地形」tab 的克制速查表（GDD §7.5）', { ...typography.caption, color: palette.bgDeep }).setAlpha(0.6));
     dim.setInteractive();
+    dim.on('pointerup', () => {
+      this.tweens.killAll();
+      dim.destroy();
+      panel.destroy(true);
+    });
   }
 
   private showEnemyDetail(e: EnemyArchetype, width: number): void {

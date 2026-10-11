@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { UnitArchetype, EnemyArchetype } from '../../core/schema/unit.ts';
-import { palette, typography, radius, motion, withAlpha, hexToInt, TOUCH_TARGET_MIN } from '../tokens.ts';
+import { palette, typography, radius, motion, hexToInt, TOUCH_TARGET_MIN } from '../tokens.ts';
 import { KIT } from './kit.ts';
 
 /** 图鉴/编成共用的卡片底板（M3B 像素语言）：纸底+语义色描边+实色偏移投影。 */
@@ -108,7 +108,7 @@ export function createUnitCard(
   // 选中态（hover）
   const hover = scene.add.graphics();
   hover.lineStyle(4, Phaser.Display.Color.HexStringToColor(palette.accent).color, 1);
-  hover.strokeRoundedRect(0, 0, CARD_W, CARD_H, radius.lg);
+  hover.strokeRoundedRect(0, 0, CARD_W, CARD_H, 6);
   hover.setVisible(false);
   card.add(hover);
 
@@ -187,7 +187,7 @@ export function createEnemyCard(
 
   const hover = scene.add.graphics();
   hover.lineStyle(4, Phaser.Display.Color.HexStringToColor(palette.accent).color, 1);
-  hover.strokeRoundedRect(0, 0, CARD_W, CARD_H, radius.lg);
+  hover.strokeRoundedRect(0, 0, CARD_W, CARD_H, 6);
   hover.setVisible(false);
   card.add(hover);
 

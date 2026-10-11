@@ -4,7 +4,7 @@ import { ensurePixelTextures } from './BattleScene.ts';
 import { UNIT_ACQUISITION } from '../data/economy.ts';
 import { readSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
-import { drawPixelBackdrop, pixelPanel, pixelButton, walletBar, sceneHeader, sceneEnter, KIT } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelButton, walletBar, sceneHeader, sceneEnter, KIT } from '../ui/components/kit.ts';
 import { ROLE_LABEL } from '../ui/components/cards.ts';
 
 const CHANNEL_STROKE: Record<string, number> = {
@@ -116,7 +116,7 @@ export class ShopScene extends Phaser.Scene {
         card.add(this.add.text(cw - 16, ch - 34, '通关解锁', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '14px', color: '#8A5F3C' }).setOrigin(1, 0));
       } else if (acq.price !== undefined) {
         const canBuy = acq.channel === 'coins' ? (this.save?.wallet.coins ?? 0) >= acq.price : (this.save?.wallet.diamonds ?? 0) >= acq.price;
-        pixelButton(this, cw - 116, ch - 54, 100, 42, canBuy ? '购买' : '差钱', {
+        pixelButton(this, x + cw - 116, y + ch - 54, 100, 42, canBuy ? '购买' : '差钱', {
           depth: 4,
           accent: canBuy ? 0x6fbf83 : 0xb3ad9c,
           enabled: canBuy,
