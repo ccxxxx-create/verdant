@@ -1,0 +1,249 @@
+import { describe, expect, it } from 'vitest';
+import { LevelDef } from '../src/core/schema/level.ts';
+import level11 from '../src/data/levels/meadow-1-1.json';
+import level12 from '../src/data/levels/meadow-1-2.json';
+import level13 from '../src/data/levels/meadow-1-3.json';
+import level14 from '../src/data/levels/meadow-1-4.json';
+import level15 from '../src/data/levels/meadow-1-5.json';
+import level41 from '../src/data/levels/meadow-4-1.json';
+import { registryFrom } from '../src/core/registry.ts';
+import { allEnemies, allUnits } from '../src/data/archetypes/index.ts';
+import { SIM_DT_MS, SHIELD_HP } from '../src/core/balance.ts';
+import { cellX } from '../src/core/battle/layout.ts';
+import {
+  cmdCollectDrop,
+  cmdPlant,
+  cmdUsePlantFoodOnUnit,
+  createBattle,
+  drainEvents,
+  findCollectableDrop,
+  spawnEnemy,
+  step,
+} from '../src/core/battle/sim.ts';
+import type { BattleState } from '../src/core/battle/types.ts';
+import { firstWaveDelayMs, isHugeWave, waveBudget } from '../src/core/battle/director.ts';
+
+const REG = registryFrom(allUnits, allEnemies);
+
+const LEVELS = [level11, level12, level13, level14, level15, level41].map((lv) => LevelDef.parse(lv));
+
+function levelById(id: string): LevelDef {
+  const lv = LEVELS.find((l) => l.id === id);
+  if (!lv) throw new Error(`unknown level ${id}`);
+  return lv;
+}
+
+/** 托管牌组：2 产物 + 5 攻击 + 1 防御（M3 模拟基线牌组，选卡面板默认截前 8 同口径）。 */
+const SIM_DECK = ['firefly_reed', 'twin_glow', 'thorn_pea', 'frost_pea', 'trifold_arrow', 'ember_fluff', 'lob_shroom', 'wood_core'];
+
+function battle(levelId: string, deck: string[] = SIM_DECK, seed = 0x5eed): BattleState {
+  const level = levelById(levelId);
+  return createBattle({ level, units: REG.unitById, enemies: REG.enemyById, deck, seed });
+}
+
+/** 简单托管 AI：收全部落地露珠 + 每 1.5s 补一次种植（先产物后攻击）。 */
+function runHeadless(levelId: string, seed: number, maxGameMs = 20 * 60 * 1000): BattleState {
+  const state = battle(levelId, levelById(levelId).template === 'conveyor' ? [] : SIM_DECK, seed);
+  let lastPlantAt = -9999;
+  while (state.status === 'playing' && state.now < maxGameMs) {
+    step(state, SIM_DT_MS);
+    for (const d of [...state.drops]) {
+      if (!d.falling) cmdCollectDrop(state, d.did);
+    }
+    if (state.now - lastPlantAt >= 1500 && tryPlant(state)) lastPlantAt = state.now;
+  }
+  return state;
+}
+
+function tryPlant(state: BattleState): boolean {
+  const freeCell = (col: number): { row: number; col: number } | undefined => {
+    for (let row = 0; row < 6; row++) {
+      if (!state.units.some((u) => u.row === row && u.col === col)) return { row, col };
+    }
+    return undefined;
+  };
+  const affordable = (id: string): boolean => {
+    const def = state.config.units.get(id);
+    if (!def) return false;
+    if (state.lightdew < def.cost) return false;
+    const cd = state.cooldowns[id];
+    return !cd || state.now >= cd.end;
+  };
+  const producers = state.units.filter((u) => u.def.role === 'producer');
+  if (producers.length < 6) {
+    const pid = SIM_DECK.find((id) => state.config.units.get(id)?.role === 'producer' && affordable(id));
+    if (pid) {
+      const cell = freeCell(0) ?? freeCell(1);
+      if (cell && cmdPlant(state, pid, cell.row, cell.col)) return true;
+    }
+  }
+  const aid = SIM_DECK.find((id) => {
+    const d = state.config.units.get(id);
+    return !!d?.attack && affordable(id);
+  });
+  if (aid) {
+    for (const col of [3, 2, 4, 5, 1, 0]) {
+      const cell = freeCell(col);
+      if (cell && cmdPlant(state, aid, cell.row, cell.col)) return true;
+    }
+  }
+  return false;
+}
+
+function snapshot(state: BattleState): Record<string, unknown> {
+  return {
+    status: state.status,
+    kills: state.stats.kills,
+    mowersUsed: state.stats.mowersUsed,
+    wave: state.wave,
+    lightdew: state.lightdew,
+    plantFood: state.plantFood,
+    elapsedMs: state.stats.elapsedMs,
+    units: state.units.map((u) => [u.uid, u.hp]),
+    enemies: state.enemies.map((e) => [e.eid, Math.round(e.hp)]),
+  };
+}
+
+describe('M3A battle kernel: wave pacing (PvZ1 口径)', () => {
+  const lv = levelById('meadow-1-1');
+  it('isHugeWave：末波恒为大波，flagEvery=10 中间波不触发', () => {
+    expect(isHugeWave(lv, lv.waves)).toBe(true);
+    expect(isHugeWave(lv, 5)).toBe(false);
+    expect(isHugeWave(lv, 0)).toBe(false);
+  });
+
+  it('waveBudget：teach 缩放 0.35 + 终波 ×2.5', () => {
+    expect(waveBudget(lv, 1)).toBe(3); // round(6 × 1.3 × 0.35) = round(2.73)
+    expect(waveBudget(lv, lv.waves)).toBeGreaterThan(waveBudget(lv, 1) * 2);
+  });
+
+  it('firstWaveDelayMs：teach=12s（M3A 重锚值）', () => {
+    expect(firstWaveDelayMs(lv)).toBe(12000);
+  });
+});
+
+describe('M3A battle kernel: cmdPlant 校验', () => {
+  it('拒绝不在牌组 / 光露不足 / 冷却中 / 占用格', () => {
+    const state = battle('meadow-1-1', ['thorn_pea']);
+    expect(cmdPlant(state, 'firefly_reed', 0, 0)).toBe(false); // 不在牌组
+    state.lightdew = 5;
+    expect(cmdPlant(state, 'thorn_pea', 0, 0)).toBe(false); // 光露不足
+    state.lightdew = 500;
+    expect(cmdPlant(state, 'thorn_pea', 0, 0)).toBe(true);
+    expect(cmdPlant(state, 'thorn_pea', 1, 1)).toBe(false); // 冷却中
+    delete state.cooldowns['thorn_pea'];
+    expect(cmdPlant(state, 'thorn_pea', 0, 0)).toBe(false); // (row0,col0) 已占用
+  });
+});
+
+describe('M3A battle kernel: traits', () => {
+  it('铁门正面格挡：直射弹扣盾不掉血', () => {
+    const state = battle('meadow-1-1', ['thorn_pea']);
+    state.lightdew = 1000;
+    expect(cmdPlant(state, 'thorn_pea', 2, 0)).toBe(true);
+    const def = state.config.enemies.get('shell_raiser');
+    if (!def) throw new Error('shell_raiser missing');
+    const e = spawnEnemy(state, def, 2);
+    e.x = cellX(4);
+    const hp0 = e.hp;
+    let shieldSeen = false;
+    for (let i = 0; i < 60; i++) {
+      step(state, SIM_DT_MS); // 3s 内豌豆必然首发（intervalMs 1430）+ 弹飞行 ~1.2s
+      if (e.shield < SHIELD_HP) shieldSeen = true;
+      if (shieldSeen) break;
+    }
+    expect(shieldSeen).toBe(true);
+    expect(e.hp).toBe(hp0); // 盾未破前本体无伤
+  });
+
+  it('generic 大招：无 power 配置的单位 8s 强化期内伤害 ×2（thorn_pea 配 multi_shot 不适用，改用 frost_pea）', () => {
+    const state = battle('meadow-1-1', ['frost_pea']);
+    state.lightdew = 1000;
+    expect(cmdPlant(state, 'frost_pea', 0, 0)).toBe(true);
+    const u = state.units[0];
+    if (!u) throw new Error('plant failed');
+    expect(u.def.power).toBeUndefined(); // 前置：无专属大招配置 → generic
+    const ant = state.config.enemies.get('march_ant');
+    if (!ant) throw new Error('march_ant missing');
+    const e = spawnEnemy(state, ant, 0);
+    e.x = cellX(5);
+    state.plantFood = 1;
+    expect(cmdUsePlantFoodOnUnit(state, u.uid)).toBe(true);
+    expect(state.plantFood).toBe(0);
+    for (let i = 0; i < 80 && u.pendingShots.length === 0; i++) step(state, SIM_DT_MS); // 首攻 tick（interval 1430ms 内）
+    expect(u.pendingShots.length).toBeGreaterThan(0);
+    expect(u.pendingShots[0]?.damage).toBe((u.def.attack?.damage ?? 0) * 2); // 强化 ×2
+  });
+});
+
+describe('M3A battle kernel: conveyor', () => {
+  it('定时发牌不超上限，手牌种植免费免冷却', () => {
+    const state = battle('meadow-4-1', []);
+    expect(state.conveyor).toBeTruthy();
+    expect(state.lightdew).toBe(0);
+    for (let i = 0; i < 140; i++) step(state, SIM_DT_MS); // 7s：首张必到手
+    const hand = state.conveyor?.hand;
+    expect(hand?.length ?? 0).toBeGreaterThan(0);
+    expect(hand?.length ?? 0).toBeLessThanOrEqual(5);
+    const pick = hand?.[0];
+    expect(pick).toBeTruthy();
+    if (pick) {
+      const before = state.lightdew;
+      expect(cmdPlant(state, pick, 0, 0)).toBe(true);
+      expect(state.lightdew).toBe(before); // 不扣费
+      expect(state.cooldowns[pick]).toBeUndefined(); // 不进冷却
+    }
+  });
+});
+
+describe('M3A battle kernel: determinism & headless sweep', () => {
+  it('同种子两局终态完全一致（确定性）', () => {
+    const a = runHeadless('meadow-1-1', 0xa11ce);
+    const b = runHeadless('meadow-1-1', 0xa11ce);
+    expect(snapshot(a)).toEqual(snapshot(b));
+  });
+
+  it.each(LEVELS.map((lv) => [lv.id, lv.template] as const))('%s 托管模拟终态合法', (levelId) => {
+    const s1 = runHeadless(levelId, 0x5eed);
+    expect(['won', 'lost']).toContain(s1.status);
+    expect(s1.lightdew).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(s1.lightdew)).toBe(true);
+    expect(Number.isFinite(s1.stats.elapsedMs)).toBe(true);
+    // 不变式：同格至多一单位
+    const cells = new Set(s1.units.map((u) => `${u.row},${u.col}`));
+    expect(cells.size).toBe(s1.units.length);
+  });
+
+  it('meadow-1-1（教学关）托管可胜——M3A 重锚后难度底线', () => {
+    let wins = 0;
+    const runs = 5;
+    for (let i = 0; i < runs; i++) {
+      if (runHeadless('meadow-1-1', 0xbeef + i).status === 'won') wins++;
+    }
+    expect(wins).toBe(runs); // teach 关 8 卡托管必须全胜，否则数值重锚过紧
+  });
+
+  it('事件队列 drain 后清空（场景消费协议）', () => {
+    const state = battle('meadow-1-1');
+    for (let i = 0; i < 20; i++) step(state, SIM_DT_MS);
+    drainEvents(state);
+    expect(state.events.length).toBe(0);
+    expect(drainEvents(state).length).toBe(0);
+  });
+
+  it('findCollectableDrop 只匹配已落地露珠', () => {
+    const state = battle('meadow-1-1');
+    for (let i = 0; i < 110; i++) step(state, SIM_DT_MS); // 首滴 4.5s 天降 + 落地 → 必有露珠
+    const anyDrop = state.drops[0];
+    expect(anyDrop).toBeTruthy();
+    if (!anyDrop) return;
+    if (anyDrop.falling) {
+      expect(findCollectableDrop(state, anyDrop.x, anyDrop.y)).toBeUndefined();
+      // 泵到落地后同坐标可收集
+      for (let i = 0; i < 100 && anyDrop.falling; i++) step(state, SIM_DT_MS);
+      expect(findCollectableDrop(state, anyDrop.x, anyDrop.y)?.did).toBe(anyDrop.did);
+    } else {
+      expect(findCollectableDrop(state, anyDrop.x, anyDrop.y)?.did).toBe(anyDrop.did);
+    }
+  });
+});

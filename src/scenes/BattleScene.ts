@@ -1,12 +1,11 @@
 import Phaser from 'phaser';
-import type { EnemyArchetype, UnitArchetype } from '../core/schema/unit.ts';
 import type { LevelDef } from '../core/schema/level.ts';
+import type { UnitArchetype } from '../core/schema/unit.ts';
 import { registryFrom } from '../core/registry.ts';
-import { producerTick } from '../core/economy.ts';
 import { readSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
 import { levelClearReward } from '../core/rewards.ts';
-import { ARMOR_MULT, SKY_SUN, SPEED_TOGGLE, WAVE_PACING } from '../core/balance.ts';
+import { SPEED_TOGGLE } from '../core/balance.ts';
 import { Rng } from '../core/rng.ts';
 import { allEnemies, allUnits } from '../data/archetypes/index.ts';
 import { meadowBattleBg } from '../data/pixels/bg/meadow.ts';
@@ -18,19 +17,24 @@ import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
 import { typography } from '../ui/tokens.ts';
 import {
-  COL_W,
+  createBattle,
+  step,
+  drainEvents,
+  cmdPlant,
+  cmdDig,
+  cmdCollectDrop,
+  cmdUsePlantFoodOnUnit,
+  cmdUsePlantFoodAtCell,
+  findCollectableDrop,
+} from '../core/battle/sim.ts';
+import type { BattleState, BattleEvent } from '../core/battle/types.ts';
+import {
   COLS,
   GATE_X,
-  GRID_Y0,
   GRID_X0,
   ROWS,
   SEED_BAR_H,
   SEED_BAR_Y,
-  SUN_PICK_R,
-  SUN_REST_X0,
-  SUN_REST_X1,
-  SUN_REST_Y0,
-  SUN_REST_Y1,
   cellRect,
   cellX,
   cellY,
@@ -42,7 +46,6 @@ const CARD_W = 112;
 const CARD_H = 128;
 const CARD_GAP = 14;
 const CARD_X0 = GRID_X0;
-const CARD_Y = SEED_BAR_Y + 10;
 
 const FONT = 'system-ui, "PingFang SC", sans-serif';
 const C_GOLD = '#FFD34D';
@@ -55,49 +58,12 @@ const OUTLINE = parseInt((PALETTE.K ?? '#26402F').replace('#', ''), 16);
 const GOLD_INT = parseInt((PALETTE.G ?? '#FFD34D').replace('#', ''), 16);
 const CREAM_INT = parseInt((PALETTE.B ?? '#FFF0C2').replace('#', ''), 16);
 
-interface UnitInst {
-  def: UnitArchetype;
-  row: number;
-  col: number;
-  hp: number;
-  img: Phaser.GameObjects.Image;
-  lastShot: number;
-}
-
-interface EnemyInst {
-  def: EnemyArchetype;
-  row: number;
-  hp: number;
-  x: number;
-  img: Phaser.GameObjects.Image;
-  slowUntil: number;
-  burnUntil: number;
-  flashUntil: number;
-  biteTarget?: UnitInst;
-}
-
-interface ProjInst {
-  img: Phaser.GameObjects.Image;
-  x: number;
-  y: number;
-  row: number;
-  damage: number;
-  element: string;
-}
-
-interface DropInst {
-  x: number;
-  restY: number;
-  img: Phaser.GameObjects.Image;
-  life: number;
-  falling: boolean;
-}
-
 interface CardRef {
   def: UnitArchetype;
   img: Phaser.GameObjects.Image;
   mask: Phaser.GameObjects.Graphics;
-  costText: Phaser.GameObjects.Text;
+  costText?: Phaser.GameObjects.Text;
+  hand?: boolean; // 传送带手牌卡：免冷却免费用
 }
 
 const ELEMENT_BULLET: Record<string, string> = {
@@ -108,7 +74,7 @@ const ELEMENT_BULLET: Record<string, string> = {
   water: 'bullet_ice',
 };
 
-/** 烘焙全部像素纹理（图鉴/战斗共用；幂等）。 */
+/** 烘焙全部像素纹理（图鉴/战斗/选卡共用；幂等）。 */
 export function ensurePixelTextures(scene: Phaser.Scene): void {
   for (const u of allUnits) bakePixelTexture(scene, `unit_${u.id}`, (unitSprites[u.id] ?? unitSprites.trifold_arrow) as PixelSprite, 4);
   for (const e of allEnemies) {
@@ -124,47 +90,42 @@ export function ensurePixelTextures(scene: Phaser.Scene): void {
 }
 
 /**
- * 战斗场景（M1C）：PvZ 式布局 + 明亮草原。
+ * 战斗场景（M3A 渲染壳）：逻辑全部在 core/battle 内核（step/drainEvents/命令函数），
+ * 本场景 = 渲染 + 输入 + FX：每帧同步内核实例坐标，事件驱动打击感件套。
  * 布局：顶部信息条(0-108) → 水平种子卡条(108-256) → 6×9 草坪(272-1040) → 左侧篱门。
- * 反馈闭环：#3 点击=格心+幽灵预览；#5 UI 与草坪零重叠；#6 参考 PvZ；#7 光露从天而降。
- * 打击感：闪白/挤压/碎屑/飘字/伤害数字/波次横幅/终波震屏/小推车拦截。
+ * 打击感保留 M2 验收版：闪白/挤压/碎屑/飘字/伤害数字/波次横幅/终波震屏/小推车拦截。
  */
 export class BattleScene extends Phaser.Scene {
   private level: LevelDef;
   private save?: SaveGame;
-  private archetypes = registryFrom(allUnits, allEnemies);
-  private rng = new Rng(0x5eed);
-  private units: UnitInst[] = [];
-  private enemies: EnemyInst[] = [];
-  private projectiles: ProjInst[] = [];
-  private drops: DropInst[] = [];
-  private lightdew = 150;
-  private wave = 0;
-  private waveTimer = 20;
-  private inWave = false;
-  private spawnQueue: { id: string; row: number }[] = [];
-  private spawnTimer = 0;
-  private dropTimer: number = SKY_SUN.firstS; // PvZ1：首枚约 5s
+  private reg = registryFrom(allUnits, allEnemies);
+  private bt!: BattleState;
+  /** 表现层专用随机（不得动内核 state.rng，防破坏确定性）。 */
+  private fxRng = new Rng(0xfacade);
   private speed = 1;
-  private state: 'playing' | 'won' | 'lost' = 'playing';
   private paused = false;
   private selected?: UnitArchetype;
   private shovelMode = false;
-  private cooldownEnd = new Map<string, number>();
-  private cooldownStart = new Map<string, number>();
-  private now = 0;
-  private kills = 0;
+  private foodMode = false;
+  private lastHandKey = '';
   private gates: (Phaser.GameObjects.Image | null)[] = [];
-  private banner?: Phaser.GameObjects.Text;
+  private unitImgs = new Map<number, Phaser.GameObjects.Image>();
+  private enemyImgs = new Map<number, Phaser.GameObjects.Image>();
+  private projImgs = new Map<number, Phaser.GameObjects.Image>();
+  private dropImgs = new Map<number, Phaser.GameObjects.Image>();
+  private cardParts: Phaser.GameObjects.GameObject[] = [];
+  private handParts: Phaser.GameObjects.GameObject[] = []; // 传送带手牌卡（重建随内核 hand diff）
   private cards: CardRef[] = [];
-  private shovelBtn?: Phaser.GameObjects.Container;
+  private banner?: Phaser.GameObjects.Text;
   private shovelFrame?: Phaser.GameObjects.Graphics;
+  private foodFrame?: Phaser.GameObjects.Graphics;
   private selFrame?: Phaser.GameObjects.Graphics;
   private ghost?: Phaser.GameObjects.Image;
   private cellHighlight?: Phaser.GameObjects.Graphics;
   private sunText?: Phaser.GameObjects.Text;
   private waveText?: Phaser.GameObjects.Text;
   private speedText?: Phaser.GameObjects.Text;
+  private foodText?: Phaser.GameObjects.Text;
   private waveBar?: Phaser.GameObjects.Graphics;
   private pauseParts: Phaser.GameObjects.GameObject[] = [];
   private pauseBtnText?: Phaser.GameObjects.Text;
@@ -178,6 +139,7 @@ export class BattleScene extends Phaser.Scene {
   create(): void {
     const injected = this.registry.get('level') as LevelDef | undefined;
     if (injected) this.level = injected;
+    this.registry.remove('level'); // 一次性消费（与 deck 同纪律，审查 P2）
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     this.resetState();
     ensurePixelTextures(this);
@@ -190,6 +152,13 @@ export class BattleScene extends Phaser.Scene {
     this.drawSeedBar();
     this.drawWaveProgress();
 
+    // 数据错误 fail-fast：绝不放空波让其"零战斗通关"发 3 星（M1C 审查 P1-4 防线，内核侧 pool 过滤后为空即此因）
+    if (this.level.pool.length === 0) {
+      this.bannerText('关卡数据错误：亮相池为空', 2.5);
+      this.time.delayedCall(2600, () => this.scene.start('Menu'));
+      return;
+    }
+
     this.bannerText('准备布防！点卡片，再点草地', 1.6);
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onPointer(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => this.updateGhost(p));
@@ -197,35 +166,37 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => {
       this.selected = undefined;
       this.shovelMode = false;
+      this.foodMode = false;
       this.refreshSelectionUi();
     });
   }
 
-  /** 场景重启时重置全部可变状态（审查 P0 惯例，扩展篱门/阳光/铲子）。 */
+  /** 场景重启时重置全部可变状态（审查 P0 惯例）。 */
   private resetState(): void {
-    this.rng = new Rng(0x5eed); // 波次序列可复现
-    this.units = [];
-    this.enemies = [];
-    this.projectiles = [];
-    this.drops = [];
-    this.spawnQueue = [];
-    this.cooldownEnd.clear();
-    this.cooldownStart.clear();
-    this.cards = [];
-    this.lightdew = this.level.startingLight;
-    this.wave = 0;
-    this.waveTimer = WAVE_PACING.firstWave[this.level.template] ?? WAVE_PACING.firstWave.default ?? 14;
-    this.inWave = false;
-    this.spawnTimer = 0;
-    this.dropTimer = 4.5;
+    this.bt = createBattle({
+      level: this.level,
+      units: this.reg.unitById,
+      enemies: this.reg.enemyById,
+      deck: this.resolveDeck(),
+      seed: 0x5eed, // 波次序列可复现
+    });
+    this.fxRng = new Rng(0xfacade);
     this.speed = 1;
-    this.state = 'playing';
     this.paused = false;
     this.selected = undefined;
     this.shovelMode = false;
-    this.now = 0;
-    this.kills = 0;
+    this.foodMode = false;
+    this.lastHandKey = '';
     this.gates = Array.from({ length: ROWS }, () => null); // 由 drawGates 填充
+    this.unitImgs.clear();
+    this.enemyImgs.clear();
+    this.projImgs.clear();
+    this.dropImgs.clear();
+    for (const go of this.cardParts) go.destroy();
+    this.cardParts = [];
+    for (const go of this.handParts) go.destroy();
+    this.handParts = [];
+    this.cards = [];
     this.banner?.destroy();
     this.banner = undefined;
     for (const go of this.pauseParts) go.destroy();
@@ -235,6 +206,15 @@ export class BattleScene extends Phaser.Scene {
     this.cellHighlight?.destroy();
     this.cellHighlight = undefined;
     this.tweens.timeScale = 1;
+  }
+
+  /** 牌组来源：选卡面板注入 → owned 截前 8（M3-D1 兜底）；一次性消费。 */
+  private resolveDeck(): string[] {
+    const injected = this.registry.get('deck') as string[] | undefined;
+    this.registry.remove('deck');
+    if (injected && injected.length > 0) return injected.slice(0, 8);
+    const owned = this.save?.progress.unlockedUnits.length ? this.save.progress.unlockedUnits : ['firefly_reed', 'thorn_pea'];
+    return owned.slice(0, 8);
   }
 
   private fallbackLevel(): LevelDef {
@@ -266,10 +246,10 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  /** 篱门（割草机式一次性护盾，PvZ 参考反馈#6）；消耗时图像随之消失。 */
+  /** 篱门小推车（一次性护盾，PvZ 参考）；消耗由 mower 事件驱动图像消失。 */
   private drawGates(): void {
     for (let r = 0; r < ROWS; r++) {
-      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_mower').setScale(3); // PvZ 式小推车（用户反馈#3 重画）
+      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_mower').setScale(3);
     }
   }
 
@@ -282,12 +262,12 @@ export class BattleScene extends Phaser.Scene {
 
     this.add.image(56, 54, 'icon_lightdew').setScale(3).setDepth(11);
     this.sunText = this.add
-      .text(100, 54, String(this.lightdew), { fontFamily: FONT, fontSize: '40px', fontStyle: 'bold', color: C_GOLD })
+      .text(100, 54, String(this.bt.lightdew), { fontFamily: FONT, fontSize: '40px', fontStyle: 'bold', color: C_GOLD })
       .setOrigin(0, 0.5)
       .setDepth(11);
 
     this.waveText = this.add
-      .text(960, 54, `第 ${this.wave} / ${this.level.waves} 波`, { ...typography.heading, fontSize: '26px', color: C_CREAM })
+      .text(960, 54, `第 ${this.bt.wave} / ${this.level.waves} 波`, { ...typography.heading, fontSize: '26px', color: C_CREAM })
       .setOrigin(0.5)
       .setDepth(11);
 
@@ -296,9 +276,9 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(1, 0.5)
       .setDepth(11)
       .setInteractive({ useHandCursor: true });
-    this.speedText.on('pointerup', () => { if (this.state === 'playing' && !this.paused) this.toggleSpeed(); });
+    this.speedText.on('pointerup', () => { if (this.bt.status === 'playing' && !this.paused) this.toggleSpeed(); });
 
-    // 暂停/回主菜单入口（审查 P1-1：此前对局内无任何退出路径，平板只能关标签页）
+    // 暂停/回主菜单入口（审查 P1-1：对局内必须可退出）
     this.pauseBtnText = this.add
       .text(1660, 54, '⏸ 暂停', { ...typography.heading, fontSize: '22px', color: C_CREAM })
       .setOrigin(1, 0.5)
@@ -307,7 +287,7 @@ export class BattleScene extends Phaser.Scene {
     this.pauseBtnText.on('pointerup', () => this.togglePause());
 
     this.add
-      .text(1880, 100, '空格加速 · 右键/铲子挖除 · ESC 取消', { ...typography.caption, color: C_CREAM })
+      .text(1880, 100, '空格加速 · 右键/铲子挖除 · 能量豆点单位或空地 · ESC 取消', { ...typography.caption, color: C_CREAM })
       .setOrigin(1, 1)
       .setDepth(11)
       .setAlpha(0.8);
@@ -315,7 +295,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** 暂停：停止 update 并弹"继续/回主菜单"层（交互件全部场景级，勿放容器）。 */
   private togglePause(): void {
-    if (this.state !== 'playing') return;
+    if (this.bt.status !== 'playing') return;
     this.paused = !this.paused;
     if (this.pauseBtnText) this.pauseBtnText.setText(this.paused ? '▶ 继续' : '⏸ 暂停');
     if (!this.paused) {
@@ -350,6 +330,7 @@ export class BattleScene extends Phaser.Scene {
     mkBtn('回主菜单', 590, () => this.scene.start('Menu'));
   }
 
+  /** 种子条：普通关=牌组卡；传送带关=手牌区（syncConveyorHand 同步）+ 工具卡。 */
   private drawSeedBar(): void {
     const g = this.add.graphics().setDepth(10);
     g.fillStyle(WOOD, 0.85);
@@ -358,72 +339,167 @@ export class BattleScene extends Phaser.Scene {
     g.lineBetween(0, SEED_BAR_Y, 1920, SEED_BAR_Y);
     g.lineBetween(0, SEED_BAR_Y + SEED_BAR_H, 1920, SEED_BAR_Y + SEED_BAR_H);
 
-    // M2 卡组=玩家拥有角色（商店/抽奖/关卡赠送均汇入 save.progress.unlockedUnits）
-    const owned = this.save?.progress.unlockedUnits.length ? this.save.progress.unlockedUnits : ['firefly_reed', 'thorn_pea'];
-    const deck = owned
-      .map((id) => this.archetypes.unitById.get(id))
-      .filter((u): u is UnitArchetype => !!u)
-      .slice(0, 8); // 种子槽上限 8（PvZ 卡栏口径）
-    this.cards = [];
     this.selFrame = this.add.graphics().setDepth(12);
-    deck.forEach((u, i) => {
-      const x = CARD_X0 + i * (CARD_W + CARD_GAP);
-      const card = this.add.container(x, CARD_Y).setDepth(11);
-      const bgG = this.add.graphics();
-      bgG.fillStyle(PAPER, 0.96);
-      bgG.fillRoundedRect(0, 0, CARD_W, CARD_H, 8);
-      bgG.lineStyle(2, OUTLINE, 1);
-      bgG.strokeRoundedRect(0, 0, CARD_W, CARD_H, 8);
-      card.add(bgG);
-      const img = this.add.image(CARD_W / 2, 52, `unit_${u.id}`).setScale(1.7);
-      card.add(img);
-      card.add(this.add.image(22, CARD_H - 18, 'icon_lightdew').setScale(1.1));
-      const costText = this.add
-        .text(38, CARD_H - 18, String(u.cost), { fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: C_DARK })
-        .setOrigin(0, 0.5);
-      card.add(costText);
-      const mask = this.add.graphics();
-      card.add(mask);
-      this.cards.push({ def: u, img, mask, costText });
-
-      // 命中区：场景级 zone（容器 setInteractive 在 depth>0 命中不可靠，实测选卡无响应——与选关层同款修复）
-      const hit = this.add.zone(x, CARD_Y, CARD_W, CARD_H).setOrigin(0, 0).setDepth(12).setInteractive({ useHandCursor: true });
-      hit.on('pointerup', () => {
-        if (this.state !== 'playing') return;
-        this.shovelMode = false;
-        this.selected = this.selected?.id === u.id ? undefined : u;
-        this.refreshSelectionUi();
-      });
-    });
-
-    // 铲子按钮（卡片行末尾；平板无右键，PvZ 铲子工具）
-    const shovelX = CARD_X0 + deck.length * (CARD_W + CARD_GAP) + 8;
-    this.shovelBtn = this.add.container(shovelX, CARD_Y).setDepth(11);
-    const sg = this.add.graphics();
-    sg.fillStyle(PAPER, 0.9);
-    sg.fillRoundedRect(0, 0, CARD_W, CARD_H, 8);
-    sg.lineStyle(2, OUTLINE, 1);
-    sg.strokeRoundedRect(0, 0, CARD_W, CARD_H, 8);
-    this.shovelBtn.add(sg);
-    this.shovelBtn.add(this.add.image(CARD_W / 2, CARD_H / 2 - 10, 'icon_shovel').setScale(3));
-    this.shovelBtn.add(this.add.text(CARD_W / 2, CARD_H - 22, '铲子', { ...typography.body, color: C_DARK }).setOrigin(0.5));
     this.shovelFrame = this.add.graphics().setDepth(12);
-    const shovelHit = this.add.zone(shovelX, CARD_Y, CARD_W, CARD_H).setOrigin(0, 0).setDepth(12).setInteractive({ useHandCursor: true });
-    shovelHit.on('pointerup', () => {
-      if (this.state !== 'playing' || this.paused) return;
-      this.shovelMode = !this.shovelMode;
-      this.selected = undefined;
-      this.refreshSelectionUi();
-    });
-
+    this.foodFrame = this.add.graphics().setDepth(12);
+    this.buildCards();
     this.add
-      .text(1880, CARD_Y + CARD_H / 2, `${this.level.id} · ${this.level.waves} 波`, { ...typography.caption, color: C_CREAM })
+      .text(1880, this.CARD_Y + CARD_H / 2, `${this.level.id} · ${this.level.waves} 波`, { ...typography.caption, color: C_CREAM })
       .setOrigin(1, 0.5)
       .setDepth(11)
       .setAlpha(0.85);
   }
 
-  /** 右侧波次进度带（PvZ 旗杆进度参考：旗帜随进度下降，填充上限即当前波）。 */
+  private get CARD_Y(): number {
+    return SEED_BAR_Y + 10;
+  }
+
+  /** 工具卡（铲子/能量豆）位置：内容卡之后固定排布（传送带关固定在手牌上限位后，防手牌变化跳动）。 */
+  private toolXs(): { shovel: number; food: number } {
+    const n = this.bt.conveyor ? (this.level.conveyor?.handLimit ?? 5) : this.cards.filter((c) => !c.hand).length;
+    const shovel = CARD_X0 + n * (CARD_W + CARD_GAP) + 8;
+    return { shovel, food: shovel + CARD_W + 8 };
+  }
+
+  private mkCard(x: number, def: UnitArchetype, opts: { hand?: boolean; showCost?: boolean } = {}): CardRef {
+    const card = this.add.container(x, this.CARD_Y).setDepth(11);
+    const bgG = this.add.graphics();
+    bgG.fillStyle(PAPER, 0.96);
+    bgG.fillRoundedRect(0, 0, CARD_W, CARD_H, 8);
+    bgG.lineStyle(2, OUTLINE, 1);
+    bgG.strokeRoundedRect(0, 0, CARD_W, CARD_H, 8);
+    card.add(bgG);
+    const img = this.add.image(CARD_W / 2, opts.showCost === false ? CARD_H / 2 : 52, `unit_${def.id}`).setScale(opts.showCost === false ? 2.1 : 1.7);
+    card.add(img);
+    let costText: Phaser.GameObjects.Text | undefined;
+    if (opts.showCost !== false) {
+      card.add(this.add.image(22, CARD_H - 18, 'icon_lightdew').setScale(1.1));
+      costText = this.add
+        .text(38, CARD_H - 18, String(def.cost), { fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: C_DARK })
+        .setOrigin(0, 0.5);
+      card.add(costText);
+    }
+    const mask = this.add.graphics();
+    card.add(mask);
+    this.cardParts.push(card);
+    // 命中区：场景级 zone（容器 setInteractive 在 depth>0 命中不可靠——M1B 实测教训）
+    const hit = this.add.zone(x, this.CARD_Y, CARD_W, CARD_H).setOrigin(0, 0).setDepth(12).setInteractive({ useHandCursor: true });
+    this.cardParts.push(hit);
+    hit.on('pointerup', () => {
+      if (this.bt.status !== 'playing') return;
+      this.shovelMode = false;
+      this.foodMode = false;
+      this.selected = this.selected?.id === def.id ? undefined : def;
+      this.refreshSelectionUi();
+    });
+    const parts = [card, hit];
+    if (opts.hand) this.handParts.push(...parts);
+    const ref: CardRef = { def, img, mask, costText, hand: opts.hand };
+    this.cards.push(ref);
+    return ref;
+  }
+
+  private mkToolCard(x: number, icon: string, label: string, onClick: () => void): void {
+    const card = this.add.container(x, this.CARD_Y).setDepth(11);
+    const sg = this.add.graphics();
+    sg.fillStyle(PAPER, 0.9);
+    sg.fillRoundedRect(0, 0, CARD_W, CARD_H, 8);
+    sg.lineStyle(2, OUTLINE, 1);
+    sg.strokeRoundedRect(0, 0, CARD_W, CARD_H, 8);
+    card.add(sg);
+    card.add(this.add.image(CARD_W / 2, CARD_H / 2 - 10, icon).setScale(3));
+    card.add(this.add.text(CARD_W / 2, CARD_H - 22, label, { ...typography.body, color: C_DARK }).setOrigin(0.5));
+    this.cardParts.push(card);
+    const hit = this.add.zone(x, this.CARD_Y, CARD_W, CARD_H).setOrigin(0, 0).setDepth(12).setInteractive({ useHandCursor: true });
+    this.cardParts.push(hit);
+    hit.on('pointerup', onClick);
+  }
+
+  private buildCards(): void {
+    for (const go of this.cardParts) go.destroy();
+    this.cardParts = [];
+    for (const go of this.handParts) go.destroy();
+    this.handParts = [];
+    this.cards = [];
+    if (this.bt.conveyor) {
+      // 传送带关：手牌由 syncConveyorHand 重建；工具卡固定在手牌上限位之后（M3-D2 无选卡）
+      const { shovel, food } = this.toolXs();
+      this.mkToolCard(shovel, 'icon_shovel', '铲子', () => {
+        if (this.bt.status !== 'playing' || this.paused) return;
+        this.shovelMode = !this.shovelMode;
+        this.selected = undefined;
+        this.foodMode = false;
+        this.refreshSelectionUi();
+      });
+      this.drawFoodCard(food);
+      return;
+    }
+    const deckDefs = this.bt.config.deck
+      .map((id) => this.reg.unitById.get(id))
+      .filter((u): u is UnitArchetype => !!u);
+    deckDefs.forEach((u) => this.mkCard(CARD_X0 + this.cards.length * (CARD_W + CARD_GAP), u, { showCost: true }));
+    const { shovel, food } = this.toolXs();
+    this.mkToolCard(shovel, 'icon_shovel', '铲子', () => {
+      if (this.bt.status !== 'playing' || this.paused) return;
+      this.shovelMode = !this.shovelMode;
+      this.selected = undefined;
+      this.foodMode = false;
+      this.refreshSelectionUi();
+    });
+    this.drawFoodCard(food);
+  }
+
+  private foodCardX = 0;
+
+  private drawFoodCard(x: number): void {
+    this.foodCardX = x;
+    const card = this.add.container(x, this.CARD_Y).setDepth(11);
+    const g = this.add.graphics();
+    g.fillStyle(PAPER, 0.9);
+    g.fillRoundedRect(0, 0, CARD_W, CARD_H, 8);
+    g.lineStyle(2, OUTLINE, 1);
+    g.strokeRoundedRect(0, 0, CARD_W, CARD_H, 8);
+    card.add(g);
+    card.add(this.add.image(CARD_W / 2, CARD_H / 2 - 14, 'icon_energy').setScale(3));
+    this.foodText = this.add
+      .text(CARD_W / 2, CARD_H - 22, `×${this.bt.plantFood}`, { ...typography.body, color: C_DARK })
+      .setOrigin(0.5);
+    card.add(this.foodText);
+    this.cardParts.push(card);
+    const hit = this.add.zone(x, this.CARD_Y, CARD_W, CARD_H).setOrigin(0, 0).setDepth(12).setInteractive({ useHandCursor: true });
+    this.cardParts.push(hit);
+    hit.on('pointerup', () => {
+      if (this.bt.status !== 'playing' || this.paused) return;
+      if (this.bt.plantFood <= 0) {
+        this.flashBanner('还没有能量豆', 0.7);
+        return;
+      }
+      this.foodMode = !this.foodMode;
+      this.selected = undefined;
+      this.shovelMode = false;
+      this.refreshSelectionUi();
+    });
+  }
+
+  /** 传送带手牌 diff 重建（内核 hand 变化才动 UI；工具卡固定不动）。 */
+  private syncConveyorHand(): void {
+    const c = this.bt.conveyor;
+    if (!c) return;
+    const key = c.hand.join(',');
+    if (key === this.lastHandKey) return;
+    this.lastHandKey = key;
+    for (const go of this.handParts) go.destroy();
+    this.handParts = [];
+    this.cards = this.cards.filter((r) => !r.hand);
+    const handDefs = c.hand
+      .map((id) => this.reg.unitById.get(id))
+      .filter((u): u is UnitArchetype => !!u);
+    handDefs.forEach((u, i) => this.mkCard(CARD_X0 + i * (CARD_W + CARD_GAP), u, { hand: true, showCost: false }));
+    if (this.selected && !c.hand.includes(this.selected.id)) this.selected = undefined;
+    this.refreshSelectionUi();
+  }
+
+  /** 右侧波次进度带（旗帜随进度下降）。 */
   private drawWaveProgress(): void {
     this.waveBar = this.add.graphics().setDepth(11);
     this.waveFlag = this.add.image(1868, 1020, 'icon_flag').setScale(3).setDepth(12);
@@ -435,7 +511,7 @@ export class BattleScene extends Phaser.Scene {
     const x = 1858;
     const y0 = 330;
     const y1 = 1020;
-    const ratio = this.level.waves > 0 ? this.wave / this.level.waves : 0;
+    const ratio = this.level.waves > 0 ? this.bt.wave / this.level.waves : 0;
     this.waveBar.clear();
     this.waveBar.fillStyle(OUTLINE, 0.28);
     this.waveBar.fillRoundedRect(x, y0, 20, y1 - y0, 6);
@@ -453,12 +529,13 @@ export class BattleScene extends Phaser.Scene {
   private refreshSelectionUi(): void {
     this.selFrame?.clear();
     this.shovelFrame?.clear();
+    this.foodFrame?.clear();
     if (this.selected) {
       const idx = this.cards.findIndex((c) => c.def.id === this.selected?.id);
       if (idx >= 0) {
         const x = CARD_X0 + idx * (CARD_W + CARD_GAP);
         this.selFrame?.lineStyle(4, GOLD_INT, 1);
-        this.selFrame?.strokeRoundedRect(x - 2, CARD_Y - 2, CARD_W + 4, CARD_H + 4, 10);
+        this.selFrame?.strokeRoundedRect(x - 2, this.CARD_Y - 2, CARD_W + 4, CARD_H + 4, 10);
       }
       this.ghost?.destroy();
       this.ghost = this.add.image(0, 0, `unit_${this.selected.id}`).setAlpha(0.55).setDepth(2).setVisible(false);
@@ -467,9 +544,13 @@ export class BattleScene extends Phaser.Scene {
       this.ghost = undefined;
     }
     if (this.shovelMode) {
-      const x = CARD_X0 + this.cards.length * (CARD_W + CARD_GAP) + 8;
+      const { shovel } = this.toolXs();
       this.shovelFrame?.lineStyle(4, GOLD_INT, 1);
-      this.shovelFrame?.strokeRoundedRect(x - 2, CARD_Y - 2, CARD_W + 4, CARD_H + 4, 10);
+      this.shovelFrame?.strokeRoundedRect(shovel - 2, this.CARD_Y - 2, CARD_W + 4, CARD_H + 4, 10);
+    }
+    if (this.foodMode) {
+      this.foodFrame?.lineStyle(4, GOLD_INT, 1);
+      this.foodFrame?.strokeRoundedRect(this.foodCardX - 2, this.CARD_Y - 2, CARD_W + 4, CARD_H + 4, 10);
     }
     this.cellHighlight?.destroy();
     this.cellHighlight = undefined;
@@ -477,7 +558,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** 幽灵预览 + 格子高亮（反馈#3：所见即所种）。 */
   private updateGhost(p: Phaser.Input.Pointer): void {
-    if (this.state !== 'playing' || this.paused) return;
+    if (this.bt.status !== 'playing' || this.paused) return;
     this.cellHighlight?.destroy();
     this.cellHighlight = undefined;
     const cell = pointerToCell(p.x, p.y);
@@ -488,8 +569,9 @@ export class BattleScene extends Phaser.Scene {
     const rect = cellRect(cell.col, cell.row);
     const hl = this.add.graphics().setDepth(1);
     if (this.selected) {
-      const occupied = this.units.some((u) => u.row === cell.row && u.col === cell.col);
-      const ok = !occupied && this.lightdew >= this.selected.cost;
+      const occupied = this.bt.units.some((u) => u.row === cell.row && u.col === cell.col);
+      const fromConveyor = this.bt.conveyor?.hand.includes(this.selected.id) ?? false;
+      const ok = !occupied && (fromConveyor || this.bt.lightdew >= this.selected.cost);
       hl.fillStyle(ok ? 0xffffff : 0xff5555, ok ? 0.16 : 0.2);
       hl.fillRect(rect.x, rect.y, rect.w, rect.h);
       hl.lineStyle(2, ok ? 0xffffff : 0xff5555, 0.8);
@@ -498,8 +580,12 @@ export class BattleScene extends Phaser.Scene {
         this.ghost.setPosition(cellX(cell.col), cellY(cell.row)).setVisible(ok);
       }
     } else if (this.shovelMode) {
-      const hasUnit = this.units.some((u) => u.row === cell.row && u.col === cell.col);
+      const hasUnit = this.bt.units.some((u) => u.row === cell.row && u.col === cell.col);
       hl.fillStyle(hasUnit ? 0xffbb55 : 0xffffff, hasUnit ? 0.18 : 0.08);
+      hl.fillRect(rect.x, rect.y, rect.w, rect.h);
+    } else if (this.foodMode) {
+      const hasUnit = this.bt.units.some((u) => u.row === cell.row && u.col === cell.col);
+      hl.fillStyle(hasUnit ? 0xffe08a : 0xffffff, hasUnit ? 0.2 : 0.08);
       hl.fillRect(rect.x, rect.y, rect.w, rect.h);
     } else {
       hl.fillStyle(0xffffff, 0.05);
@@ -509,437 +595,361 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private toggleSpeed(): void {
-    if (this.state !== 'playing') return;
+    if (this.bt.status !== 'playing') return;
     this.speed = this.speed === 1 ? SPEED_TOGGLE : 1;
     this.tweens.timeScale = this.speed;
     this.speedText?.setText(`${this.speed}× 速度`);
   }
 
-  // —— 主循环 ——
+  // —— 主循环：内核 step → 事件 FX → 图像投影 ——
   update(_time: number, delta: number): void {
-    if (this.state !== 'playing' || this.paused) return;
+    if (this.bt.status !== 'playing' || this.paused) return;
     const clamped = Math.min(delta, 50); // 钳制切后台回来的巨帧
-    const dt = (clamped / 1000) * this.speed;
-    this.now += clamped * this.speed; // 统一时基：倍速下所有计时同步（now 与 dt 同钳制）
-
-    this.updateSunSpawns(dt);
-    this.updateDrops(dt);
-    this.updateWaves(dt);
-    this.updateUnits();
-    this.updateEnemies(dt);
-    this.updateProjectiles(dt);
+    step(this.bt, clamped * this.speed); // 倍速：dt 缩放后交给内核（now 与计时同步缩放）
+    for (const ev of drainEvents(this.bt)) this.onEvent(ev);
+    this.syncSprites();
+    this.syncConveyorHand();
     this.updateCards();
-    this.sunText?.setText(String(this.lightdew));
-    this.waveText?.setText(`第 ${this.wave} / ${this.level.waves} 波`);
+    this.sunText?.setText(String(this.bt.lightdew));
+    this.waveText?.setText(`第 ${this.bt.wave} / ${this.level.waves} 波`);
     this.redrawWaveBar();
   }
 
-  // —— 光露（反馈#7：从天而降 + 植株产出，落地停留可收集） ——
-  private updateSunSpawns(dt: number): void {
-    this.dropTimer -= dt;
-    if (this.dropTimer <= 0) {
-      this.dropTimer = 7 + this.rng.next() * 4;
-      this.spawnSkySun();
-    }
-  }
-
-  private spawnSkySun(): void {
-    const x = SUN_REST_X0 + this.rng.next() * (SUN_REST_X1 - SUN_REST_X0);
-    const restY = SUN_REST_Y0 + this.rng.next() * (SUN_REST_Y1 - SUN_REST_Y0);
-    const img = this.add.image(x, -40, 'icon_lightdew').setScale(1.6).setDepth(3);
-    const drop: DropInst = { x, restY, img, life: 14, falling: true };
-    this.drops.push(drop);
-    this.tweens.add({
-      targets: img,
-      y: restY,
-      duration: 4200,
-      ease: 'Sine.easeIn',
-      onComplete: () => {
-        drop.falling = false;
-      },
-    });
-  }
-
-  private spawnPlantSun(u: UnitInst): void {
-    const restY = u.img.y - 44;
-    const img = this.add.image(u.img.x + 14, u.img.y - 70, 'icon_lightdew').setScale(1.3).setDepth(3);
-    const drop: DropInst = { x: img.x, restY, img, life: 14, falling: true };
-    this.drops.push(drop);
-    this.tweens.add({
-      targets: img,
-      y: restY,
-      duration: 420,
-      ease: 'Back.easeOut',
-      onComplete: () => {
-        drop.falling = false;
-      },
-    });
-  }
-
-  private updateDrops(dt: number): void {
-    for (let i = this.drops.length - 1; i >= 0; i--) {
-      const d = this.drops[i];
-      if (!d || d.falling) continue;
-      d.life -= dt;
-      d.img.y = d.restY + Math.sin(this.now / 300 + i) * 3;
-      d.img.setAlpha(d.life < 3 ? 0.35 + 0.65 * Math.abs(Math.sin(this.now / 130)) : 1);
-      if (d.life <= 0) {
-        d.img.destroy();
-        this.drops.splice(i, 1);
+  // —— 事件 → 打击感（M2 件套逐块移植） ——
+  private onEvent(ev: BattleEvent): void {
+    switch (ev.t) {
+      case 'plant': {
+        const img = this.add.image(ev.unit.x, ev.unit.y, `unit_${ev.unit.def.id}`).setDepth(2);
+        this.unitImgs.set(ev.unit.uid, img);
+        this.squash(img, 1.18);
+        this.debris(img.x, img.y + 40, 'd', 5); // 种植尘土
+        this.selected = undefined;
+        this.refreshSelectionUi();
+        break;
       }
-    }
-  }
-
-  /** 收集阳光：飞向左上计数器（PvZ 式）。 */
-  private collectSun(d: DropInst): void {
-    this.lightdew += 25;
-    this.floatText(d.x, d.img.y - 20, '+25', C_GOLD);
-    this.debris(d.x, d.img.y, 'y', 4);
-    const img = d.img;
-    this.tweens.add({
-      targets: img,
-      x: 56,
-      y: 54,
-      scale: 0.6,
-      duration: 420,
-      ease: 'Quad.easeIn',
-      onComplete: () => img.destroy(),
-    });
-  }
-
-  // —— 波次导演（GDD §8.2 简化口径 + M1C 节奏调参） ——
-  private updateWaves(dt: number): void {
-    if (!this.inWave) {
-      this.waveTimer -= dt;
-      if (this.waveTimer <= 0 && this.wave < this.level.waves) this.startWave();
-      return;
-    }
-    this.spawnTimer -= dt;
-    if (this.spawnQueue.length > 0 && this.spawnTimer <= 0) {
-      const item = this.spawnQueue.shift();
-      if (item) this.spawnEnemy(item.id, item.row);
-      this.spawnTimer = WAVE_PACING.spawnInterval[this.level.template] ?? WAVE_PACING.spawnInterval.default ?? 1.8;
-    }
-    if (this.spawnQueue.length === 0 && this.enemies.length === 0) {
-      this.inWave = false;
-      if (this.wave >= this.level.waves) {
-        this.winLevel();
-        return;
+      case 'dig': {
+        const img = this.unitImgs.get(ev.unit.uid);
+        if (img) {
+          this.floatText(img.x, img.y - 30, '已挖除', C_CREAM, 15);
+          this.debris(img.x, img.y, 'd', 6);
+          img.destroy();
+          this.unitImgs.delete(ev.unit.uid);
+        }
+        break;
       }
-      this.waveTimer = WAVE_PACING.betweenWaves[this.level.template] ?? WAVE_PACING.betweenWaves.default ?? 12;
-    }
-  }
-
-  private startWave(): void {
-    const scale = WAVE_PACING.scale[this.level.template] ?? WAVE_PACING.scale.default ?? 1;
-    const isFinal = this.wave + 1 === this.level.waves;
-    const budget = Math.max(1, Math.round(WAVE_PACING.base * (1 + (this.wave + 1) * WAVE_PACING.growth) * scale * (isFinal ? WAVE_PACING.finalWaveMult : 1)));
-    const pool = this.level.pool.map((id) => this.archetypes.enemyById.get(id)).filter((e): e is EnemyArchetype => !!e);
-    if (pool.length === 0) {
-      // 数据错误 fail-fast：绝不放空波让其"零战斗通关"发 3 星（审查 P1-4）
-      this.bannerText('关卡数据错误：亮相池为空', 2.5);
-      this.time.delayedCall(2600 / this.speed, () => this.scene.start('Menu'));
-      return;
-    }
-    this.wave += 1;
-    this.inWave = true;
-    this.spawnQueue = [];
-    let left = budget;
-    let guard = 0;
-    let laneCursor = 0;
-    // teach 前 3 波每行至多 1 只（审查 P1-3：原首波 2 只同行概率 44.5%，新手看不见来向=必败风险）
-    const laneDedupe = this.level.template === 'teach' && this.wave <= 3;
-    while (left > 0 && guard++ < 80) {
-      const pick = pool[this.rng.int(0, pool.length)];
-      if (!pick || pick.points <= 0) break; // 点数 0（Boss）不入普通波池
-      if (pick.points > left) continue; // 点数超预算换一只（勿 break 浪费预算）
-      this.spawnQueue.push({ id: pick.id, row: laneDedupe ? laneCursor++ % ROWS : this.rng.int(0, ROWS) });
-      left -= pick.points;
-    }
-    this.spawnTimer = 0.5;
-    if (isFinal) {
-      this.bannerText('一大波敌人来袭！', 1.8);
-      this.cameras.main.shake(260, 0.005);
-    } else {
-      this.bannerText(`第 ${this.wave} 波`, 1);
-    }
-  }
-
-  private spawnEnemy(id: string, row: number): void {
-    const def = this.archetypes.enemyById.get(id);
-    if (!def) return;
-    const img = this.add.image(1960, 0, `enemy_${id}`);
-    const h = img.displayHeight;
-    // 飞行单位悬空于车道上方（PvZ 气球式）；地面单位脚贴行底（防漂浮）
-    img.y = def.flying ? cellY(row) - 30 : enemyFeetY(row, h);
-    this.enemies.push({ def, row, hp: def.hp, x: 1960, img, slowUntil: 0, burnUntil: 0, flashUntil: 0 });
-  }
-
-  // —— 单位行为 ——
-  private updateUnits(): void {
-    for (const u of [...this.units]) { // 快照遍历（trigger 爆破会移除单位）
-      const def = u.def;
-      if (def.produce && this.now - u.lastShot >= def.produce.intervalMs) {
-        u.lastShot = this.now;
-        // 收益只走掉落路径：立即到账为 0，阳光须玩家点击收集（反馈#7 + 审查 P1-1）
-        const tick = producerTick(def);
-        this.lightdew += tick.immediateGain;
-        if (tick.spawnsDrop) this.spawnPlantSun(u);
-        this.squash(u.img);
-        continue;
+      case 'enemySpawn':
+        break; // 图像由 syncSprites diff 创建
+      case 'enemyDeath': {
+        const img = this.enemyImgs.get(ev.enemy.eid);
+        if (img) {
+          this.debris(img.x, img.y, 'e', 8);
+          img.destroy();
+          this.enemyImgs.delete(ev.enemy.eid);
+        }
+        break;
       }
-      const a = def.attack;
-      if (!a) continue;
-      if (a.kind === 'trigger') {
-        // 埋地爆破（审查 P1-4：此前退化为 1400ms 单发 1800 直射=全场清屏）
-        const prep = a.prepMs ?? 12000;
-        if (this.now - u.lastShot < prep) continue;
-        const cx = u.img.x;
-        const reach = COL_W * ((a.radius ?? 1) + 0.2);
-        for (const e of [...this.enemies]) {
-          if (Math.abs(e.x - cx) < reach) {
-            e.hp -= a.damage ?? 400;
-            e.img.setTintFill(0xffffff);
-            e.flashUntil = this.now + 120;
+      case 'unitDeath': {
+        const img = this.unitImgs.get(ev.unit.uid);
+        if (img) {
+          this.debris(img.x, img.y, 'M', 8);
+          img.destroy();
+          this.unitImgs.delete(ev.unit.uid);
+        }
+        break;
+      }
+      case 'hit': {
+        const img = ev.tid !== undefined ? (ev.target === 'enemy' ? this.enemyImgs.get(ev.tid) : this.unitImgs.get(ev.tid)) : undefined;
+        if (ev.target === 'enemy') {
+          this.debris(ev.x, img?.y ?? ev.y, 'h', 3);
+          if (ev.damage > 0) this.floatText(ev.x, (img?.y ?? ev.y) - 30, String(ev.damage), '#FFFFFF', 15);
+        }
+        break;
+      }
+      case 'shoot': {
+        // 发射单位挤压（shoot 事件无 id：按发射坐标匹配，producer 与攻击单位两种锚点都试）
+        for (const img of this.unitImgs.values()) {
+          if (Math.abs(img.x - ev.x) < 8 && (Math.abs(img.y - ev.y) < 8 || Math.abs(img.y - (ev.y + 24)) < 8)) {
+            this.squash(img);
+            break;
           }
         }
+        break;
+      }
+      case 'blast': {
         this.cameras.main.shake(220, 0.006);
-        this.debris(cx, u.img.y, 'R', 16);
-        this.debris(cx, u.img.y, 'r', 10);
-        this.floatText(cx, u.img.y - 70, '轰！', '#FF8A3D');
-        this.removeUnit(u, true);
-        continue;
+        this.debris(ev.x, ev.y, 'R', 16);
+        this.debris(ev.x, ev.y, 'r', 10);
+        this.floatText(ev.x, ev.y - 70, '轰！', '#FF8A3D');
+        break;
       }
-      const interval = a.intervalMs ?? 1400;
-      if (this.now - u.lastShot < interval) continue;
-      const target = this.nearestEnemyInRow(u.row, u.img.x - 20);
-      if (!target) continue;
-      u.lastShot = this.now;
-      this.squash(u.img);
-      const el = a.element ?? 'none';
-      const key = ELEMENT_BULLET[el] ?? 'bullet_pea';
-      const img = this.add.image(u.img.x + 40, u.img.y - 24, key);
-      this.projectiles.push({
-        img,
-        x: img.x,
-        y: img.y,
-        row: u.row,
-        damage: (a.damage ?? 20) * (a.shots ?? 1),
-        element: el,
-      });
-    }
-  }
-
-  private nearestEnemyInRow(row: number, fromX: number): EnemyInst | undefined {
-    let best: EnemyInst | undefined;
-    for (const e of this.enemies) {
-      if (e.row !== row || e.x < fromX) continue;
-      if (!best || e.x < best.x) best = e;
-    }
-    return best;
-  }
-
-  // —— 敌人行为 ——
-  private updateEnemies(dt: number): void {
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const e = this.enemies[i];
-      if (!e) continue;
-      const fireResist = e.def.traits?.includes('fire_resist') ?? false;
-      if (e.burnUntil > this.now) {
-        e.hp -= (fireResist ? 7 : 15) * dt;
-        if (this.rng.next() < dt * 6) this.debris(e.x, e.img.y, 'R', 1);
-      }
-      if (e.flashUntil && e.flashUntil < this.now) {
-        e.img.clearTint();
-        e.flashUntil = 0;
-      }
-      if (!e.def.flying) {
-        if (!e.biteTarget) {
-          // 咬同 row 身前最近的单位
-          let best: UnitInst | undefined;
-          for (const u of this.units) {
-            if (u.row !== e.row || u.hp <= 0) continue;
-            const dx = e.x - 14 - u.img.x;
-            if (dx >= -10 && dx < COL_W * 0.7) {
-              if (!best || u.img.x > best.img.x) best = u;
-            }
+      case 'sunCollect': {
+        const img = this.dropImgs.get(ev.did);
+        this.dropImgs.delete(ev.did);
+        if (ev.amount <= 0) {
+          // 露珠蛾偷吃（内核 amount=0）
+          if (img) {
+            this.debris(img.x, img.y, 'g', 4);
+            img.destroy();
           }
-          if (best) e.biteTarget = best;
+          break;
         }
-        if (e.biteTarget) {
-          e.biteTarget.hp -= e.def.biteDps * dt;
-          e.img.x = e.biteTarget.img.x + 20;
-          e.x = e.img.x; // 同步逻辑坐标（命中/飘字用）
-          if (e.biteTarget.hp <= 0) {
-            const dead = e.biteTarget;
-            e.biteTarget = undefined;
-            this.removeUnit(dead, true);
-          }
-        } else {
-          const slowImmune = e.def.traits?.includes('slow_immune') ?? false;
-          const slow = !slowImmune && e.slowUntil > this.now ? 0.55 : 1;
-          e.x -= e.def.speed * COL_W * slow * dt;
-          e.img.x = e.x;
-          e.img.setAngle(Math.sin(this.now / 140) * 2); // 行走摇摆
+        this.floatText(ev.x, ev.y - 20, `+${ev.amount}`, C_GOLD);
+        if (img) {
+          this.debris(img.x, img.y, 'y', 4);
+          this.tweens.add({
+            targets: img,
+            x: 56,
+            y: 54,
+            scale: 0.6,
+            duration: 420,
+            ease: 'Quad.easeIn',
+            onComplete: () => img.destroy(),
+          });
         }
-      } else {
-        // 飞行：掠过单位直扑篱门（减速同样尊重 slow_immune，审查 P2-6）
-        const slowImmune = e.def.traits?.includes('slow_immune') ?? false;
-        const slow = !slowImmune && e.slowUntil > this.now ? 0.6 : 1;
-        e.x -= e.def.speed * COL_W * slow * dt;
-        e.img.x = e.x;
-        e.img.y = cellY(e.row) - 30 + Math.sin(this.now / 220) * 6;
+        break;
       }
-      if (e.x < GATE_X + 20) {
-        const gate = this.gates[e.row];
+      case 'plantFoodCollect': {
+        const img = this.dropImgs.get(ev.did);
+        this.dropImgs.delete(ev.did);
+        if (img) {
+          this.floatText(img.x, img.y - 20, '能量+1', '#9BE564');
+          this.tweens.add({
+            targets: img,
+            x: 56,
+            y: 54,
+            scale: 0.6,
+            duration: 420,
+            ease: 'Quad.easeIn',
+            onComplete: () => img.destroy(),
+          });
+        }
+        break;
+      }
+      case 'powerStart': {
+        this.unitImgs.get(ev.unit.uid)?.setTint(GOLD_INT);
+        break;
+      }
+      case 'powerEnd': {
+        this.unitImgs.get(ev.unit.uid)?.clearTint();
+        break;
+      }
+      case 'knockback': {
+        this.cameras.main.shake(160, 0.004);
+        this.debris(ev.x, ev.y, 'R', 10);
+        break;
+      }
+      case 'stun':
+        this.floatText(ev.x, ev.y - 40, '定身！', '#9BD4FF', 16);
+        break;
+      case 'web':
+        this.floatText(ev.x, ev.y - 40, '被缠住了！', '#DDDDDD', 16);
+        break;
+      case 'shieldBreak':
+        this.floatText(ev.x, ev.y - 40, '铁盾碎裂！', C_CREAM, 16);
+        this.debris(ev.x, ev.y, 'h', 8);
+        break;
+      case 'mower': {
+        const gate = this.gates[ev.row];
         if (gate) {
-          // 小推车拦截：一次性护盾（割草机式，反馈#6/#4），消耗后图标消失
           gate.destroy();
-          this.gates[e.row] = null;
-          this.cameras.main.flash(160, 255, 220, 120);
-          this.floatText(GATE_X + 60, cellY(e.row) - 30, '小推车出动！', C_CREAM);
-          this.debris(GATE_X + 20, cellY(e.row), 'n', 10);
-          this.killEnemy(i);
-          continue;
+          this.gates[ev.row] = null;
         }
+        this.cameras.main.flash(160, 255, 220, 120);
+        this.floatText(GATE_X + 60, cellY(ev.row) - 30, '小推车出动！', C_CREAM);
+        this.debris(GATE_X + 20, cellY(ev.row), 'n', 10);
+        break;
+      }
+      case 'sunSpawn':
+      case 'plantFoodSpawn':
+        break; // 掉落图像由 syncSprites diff 创建（事件仅为语义标记）
+      case 'waveStart':
+        if (ev.final) this.cameras.main.shake(260, 0.005); // 终波震屏
+        break;
+      case 'waveWarning':
+        break; // 横幅由 banner 事件驱动
+      case 'banner':
+        this.bannerText(ev.text, ev.hold);
+        break;
+      case 'flash':
+        this.flashBanner(ev.text, ev.hold);
+        break;
+      case 'win':
+        this.winLevel();
+        break;
+      case 'lose':
         this.loseLevel();
-        return;
-      }
-      if (e.hp <= 0) this.killEnemy(i);
+        break;
+      default:
+        break;
     }
   }
 
-  private updateProjectiles(dt: number): void {
-    for (let i = this.projectiles.length - 1; i >= 0; i--) {
-      const p = this.projectiles[i];
-      if (!p) continue;
-      p.x += 620 * dt;
-      p.img.x = p.x;
-      const hit = this.nearestEnemyInRow(p.row, p.x - 10);
-      if (hit && Math.abs(hit.x - p.x) < 30) {
-        const mult = ARMOR_MULT[hit.def.armor] ?? 1;
-        const dmg = Math.round(p.damage * mult);
-        hit.hp -= dmg;
-        hit.img.setTintFill(0xffffff);
-        hit.flashUntil = this.now + 80;
-        if (p.element === 'ice' && !(hit.def.traits?.includes('slow_immune') ?? false)) hit.slowUntil = this.now + 2200;
-        if (p.element === 'fire' && !(hit.def.traits?.includes('fire_resist') ?? false)) hit.burnUntil = this.now + 4000;
-        this.debris(p.x, p.y, 'h', 3);
-        this.floatText(hit.x, hit.img.y - 30, String(dmg), '#FFFFFF', 15);
-        p.img.destroy();
-        this.projectiles.splice(i, 1);
-        if (hit.hp <= 0) this.killEnemy(this.enemies.indexOf(hit));
-      } else if (p.x > 1980) {
-        p.img.destroy();
-        this.projectiles.splice(i, 1);
+  /** 渲染层=内核状态的投影：diff 创建/销毁 + 每帧坐标同步。 */
+  private syncSprites(): void {
+    // 单位（静止，种植锚点=格心）
+    const seenU = new Set<number>();
+    for (const u of this.bt.units) {
+      seenU.add(u.uid);
+      let img = this.unitImgs.get(u.uid);
+      if (!img) {
+        img = this.add.image(u.x, u.y, `unit_${u.def.id}`).setDepth(2);
+        this.unitImgs.set(u.uid, img);
       }
     }
-  }
-
-  // —— 交互 ——
-  private onPointer(p: Phaser.Input.Pointer): void {
-    if (this.state !== 'playing' || this.paused) return;
-    // 1) 铲除/光标意图优先（审查 P2-1：铲子模式下不再被阳光抢走同一次点击）
-    if (p.rightButtonDown() || this.shovelMode) {
-      const cell = pointerToCell(p.x, p.y);
-      if (cell) this.digAt(cell.row, cell.col);
-      return;
-    }
-    // 2) 收集阳光（一次点击只做一个意图；顶条后的下落阳光不可见也不可点）
-    for (let i = this.drops.length - 1; i >= 0; i--) {
-      const d = this.drops[i];
-      if (!d || d.img.y < GRID_Y0) continue;
-      if (Phaser.Math.Distance.Between(p.x, p.y, d.x, d.img.y) < SUN_PICK_R) {
-        this.collectSun(d);
-        this.drops.splice(i, 1);
-        return;
+    for (const [uid, img] of this.unitImgs) {
+      if (!seenU.has(uid)) {
+        img.destroy();
+        this.unitImgs.delete(uid);
       }
     }
-    // 3) 种植
-    if (!this.selected) return;
-    const cell = pointerToCell(p.x, p.y);
-    if (!cell) return;
-    const { row, col } = cell;
-    if (this.units.some((u) => u.row === row && u.col === col)) {
-      this.flashBanner('这一格已经有单位了', 0.7);
-      return;
-    }
-    const def = this.selected;
-    if (this.lightdew < def.cost) {
-      this.flashBanner('光露不足', 0.8);
-      return;
-    }
-    if (this.now < (this.cooldownEnd.get(def.id) ?? 0)) {
-      this.flashBanner(`${def.name}冷却中`, 0.7);
-      return;
-    }
-    this.plant(def, row, col);
-  }
-
-  private plant(def: UnitArchetype, row: number, col: number): void {
-    this.lightdew -= def.cost;
-    const img = this.add.image(cellX(col), cellY(row), `unit_${def.id}`); // 落点=格心（反馈#3）
-    this.units.push({ def, row, col, hp: def.hp, img, lastShot: this.now });
-    this.cooldownStart.set(def.id, this.now);
-    this.cooldownEnd.set(def.id, this.now + def.cooldownMs);
-    this.squash(img, 1.18);
-    this.debris(img.x, img.y + 40, 'd', 5); // 种植尘土
-    this.selected = undefined;
-    this.refreshSelectionUi();
-  }
-
-  /** 挖除指定格（右键/铲子；无返还，PvZ 惯例）。 */
-  private digAt(row: number, col: number): void {
-    const hit = this.units.find((u) => u.row === row && u.col === col);
-    if (!hit) return;
-    this.removeUnit(hit, false);
-    this.floatText(cellX(col), cellY(row) - 30, '已挖除', C_CREAM, 15);
-    this.debris(cellX(col), cellY(row), 'd', 6);
-  }
-
-  private removeUnit(u: UnitInst, byDeath: boolean): void {
-    const idx = this.units.indexOf(u);
-    if (idx >= 0) this.units.splice(idx, 1);
-    for (const e of this.enemies) {
-      if (e.biteTarget === u) {
-        e.biteTarget = undefined;
-        e.x = e.img.x; // 逻辑位置回同步（防瞬移回跳）
+    // 敌人（地面脚贴行底+摇摆；飞行悬空+内核漂移）
+    const seenE = new Set<number>();
+    for (const e of this.bt.enemies) {
+      seenE.add(e.eid);
+      let img = this.enemyImgs.get(e.eid);
+      if (!img) {
+        img = this.add.image(e.x, 0, `enemy_${e.def.id}`).setDepth(3);
+        this.enemyImgs.set(e.eid, img);
+      }
+      img.x = e.x;
+      if (e.def.flying) {
+        img.y = cellY(e.row) - 30 + e.yOffset;
+      } else {
+        img.y = enemyFeetY(e.row, img.displayHeight);
+        img.setAngle(Math.sin(this.bt.now / 140) * 2); // 行走摇摆
       }
     }
-    if (byDeath) this.debris(u.img.x, u.img.y, 'M', 8);
-    u.img.destroy();
-  }
-
-  private killEnemy(index: number): void {
-    const e = this.enemies[index];
-    if (!e) return;
-    this.kills += 1;
-    this.debris(e.x, e.img.y, 'e', 8);
-    e.img.destroy();
-    this.enemies.splice(index, 1);
+    for (const [eid, img] of this.enemyImgs) {
+      if (!seenE.has(eid)) {
+        img.destroy();
+        this.enemyImgs.delete(eid);
+      }
+    }
+    // 弹体（straight/lobbed 坐标均由内核插值）
+    const seenP = new Set<number>();
+    for (const p of this.bt.projectiles) {
+      seenP.add(p.pid);
+      let img = this.projImgs.get(p.pid);
+      if (!img) {
+        img = this.add.image(p.x, p.y, ELEMENT_BULLET[p.element] ?? 'bullet_pea').setDepth(4);
+        this.projImgs.set(p.pid, img);
+      }
+      img.setPosition(p.x, p.y);
+    }
+    for (const [pid, img] of this.projImgs) {
+      if (!seenP.has(pid)) {
+        img.destroy();
+        this.projImgs.delete(pid);
+      }
+    }
+    // 掉落（下落 y 由内核插值；静置浮动/临期闪烁是表现层）
+    const seenD = new Set<number>();
+    for (const d of this.bt.drops) {
+      seenD.add(d.did);
+      let img = this.dropImgs.get(d.did);
+      if (!img) {
+        img = this.add
+          .image(d.x, d.y, d.kind === 'light' ? 'icon_lightdew' : 'icon_energy')
+          .setDepth(3)
+          .setScale(d.kind === 'light' ? 1.6 : 1.4);
+        this.dropImgs.set(d.did, img);
+      }
+      const bob = d.falling ? 0 : Math.sin(this.bt.now / 300 + d.did) * 3;
+      img.setPosition(d.x, d.y + bob);
+      if (!d.falling) img.setAlpha(d.life < 3 ? 0.35 + 0.65 * Math.abs(Math.sin(this.bt.now / 130)) : 1);
+    }
+    for (const [did, img] of this.dropImgs) {
+      if (!seenD.has(did)) {
+        img.destroy();
+        this.dropImgs.delete(did);
+      }
+    }
+    // 敌人受击白闪（内核 flashUntil 过期只清字段，表现在此同步清 tint）
+    for (const [eid, img] of this.enemyImgs) {
+      const e = this.bt.enemies.find((x) => x.eid === eid);
+      if (!e) continue;
+      if (e.flashUntil > this.bt.now) {
+        if (!img.isTinted) img.setTintFill(0xffffff);
+      } else if (img.isTinted) {
+        img.clearTint();
+      }
+    }
   }
 
   // —— 卡片冷却/可购状态 ——
   private updateCards(): void {
     for (const c of this.cards) {
-      const end = this.cooldownEnd.get(c.def.id) ?? 0;
-      const start = this.cooldownStart.get(c.def.id) ?? 0;
-      const remaining = Math.max(0, end - this.now);
-      const total = Math.max(1, end - start);
+      if (c.hand) continue; // 传送带手牌免冷却免费用
+      const cd = this.bt.cooldowns[c.def.id];
+      const remaining = cd ? Math.max(0, cd.end - this.bt.now) : 0;
+      const total = cd ? Math.max(1, cd.end - cd.start) : 1;
       c.mask.clear();
       if (remaining > 0) {
         const h = (CARD_H * remaining) / total;
         c.mask.fillStyle(OUTLINE, 0.55);
         c.mask.fillRect(0, 0, CARD_W, h);
       }
-      const affordable = this.lightdew >= c.def.cost;
+      const affordable = this.bt.lightdew >= c.def.cost;
       if (!affordable) c.img.setTint(0x9a9a9a);
       else c.img.clearTint();
-      c.costText.setAlpha(affordable ? 1 : 0.45);
+      c.costText?.setAlpha(affordable ? 1 : 0.45);
+    }
+    this.foodText?.setText(`×${this.bt.plantFood}`);
+  }
+
+  // —— 交互 ——
+  private onPointer(p: Phaser.Input.Pointer): void {
+    if (this.bt.status !== 'playing' || this.paused) return;
+    // 1) 铲除/光标意图优先（审查 P2-1：铲子模式下不被阳光抢走同一次点击）
+    if (p.rightButtonDown() || this.shovelMode) {
+      const cell = pointerToCell(p.x, p.y);
+      if (cell) cmdDig(this.bt, cell.row, cell.col);
+      return;
+    }
+    // 2) 能量豆模式：点单位=该单位大招；点空地=击退+火伤
+    if (this.foodMode) {
+      const cell = pointerToCell(p.x, p.y);
+      if (!cell) return;
+      const u = this.bt.units.find((x) => x.row === cell.row && x.col === cell.col);
+      const ok = u ? cmdUsePlantFoodOnUnit(this.bt, u.uid) : cmdUsePlantFoodAtCell(this.bt, cell.row, cell.col);
+      if (ok) {
+        this.foodMode = false;
+        this.refreshSelectionUi();
+      } else {
+        this.flashBanner('这里用不了能量豆', 0.7);
+      }
+      return;
+    }
+    // 3) 收集露珠/能量（一次点击只做一个意图；内核只匹配已落地者）
+    const drop = findCollectableDrop(this.bt, p.x, p.y);
+    if (drop) {
+      cmdCollectDrop(this.bt, drop.did);
+      return;
+    }
+    // 4) 种植（命令发内核；失败原因提示）
+    if (!this.selected) return;
+    const cell = pointerToCell(p.x, p.y);
+    if (!cell) return;
+    const def = this.selected;
+    const fromConveyor = this.bt.conveyor?.hand.includes(def.id) ?? false;
+    if (this.bt.units.some((u) => u.row === cell.row && u.col === cell.col)) {
+      this.flashBanner('这一格已经有单位了', 0.7);
+      return;
+    }
+    if (!fromConveyor && this.bt.lightdew < def.cost) {
+      this.flashBanner('光露不足', 0.8);
+      return;
+    }
+    if (!fromConveyor && this.bt.now < (this.bt.cooldowns[def.id]?.end ?? 0)) {
+      this.flashBanner(`${def.name}冷却中`, 0.7);
+      return;
+    }
+    if (!cmdPlant(this.bt, def.id, cell.row, cell.col)) {
+      this.flashBanner('无法种植', 0.7);
     }
   }
 
-  // —— 打击感件套 ——
+  // —— 打击感件套（M2 移植；随机一律 fxRng，不碰内核随机序列） ——
   private squash(img: Phaser.GameObjects.Image, overshoot = 1.12): void {
     this.tweens.add({
       targets: img,
@@ -957,8 +967,8 @@ export class BattleScene extends Phaser.Scene {
       const r = this.add.rectangle(x, y, 5, 5, color).setDepth(4);
       this.tweens.add({
         targets: r,
-        x: x + (this.rng.next() - 0.5) * 90,
-        y: y + (this.rng.next() - 0.5) * 90,
+        x: x + (this.fxRng.next() - 0.5) * 90,
+        y: y + (this.fxRng.next() - 0.5) * 90,
         alpha: 0,
         scale: 0.2,
         duration: 300,
@@ -989,7 +999,7 @@ export class BattleScene extends Phaser.Scene {
       alpha: 1,
       duration: 140,
       yoyo: true,
-      hold,
+      hold: hold * 1000, // 内核 hold 单位秒，Phaser tween hold 单位 ms（审查 P1 修正）
       onComplete: () => b.destroy(), // 闭包捕获自身 target（审查 P2-5）
     });
   }
@@ -1005,15 +1015,14 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets: this.banner, alpha: 0, duration: hold * 1000, onComplete: () => this.banner?.destroy() });
   }
 
-  // —— 结算 ——
+  // —— 结算（写档沿用 M2 经济；win/lose 事件驱动） ——
   private winLevel(): void {
-    this.state = 'won';
     this.persistProgress(3);
     this.bannerText('胜利！晨雾草原守住了', 2);
     this.time.delayedCall(2400 / this.speed, () => this.scene.start('Menu'));
   }
 
-  /** 败北写档：stats.losses（审查 P2-7：此前永不更新）。 */
+  /** 败北写档：stats.losses（审查 P2-7）。 */
   private persistLoss(): void {
     try {
       const save = readSave(window.localStorage);
@@ -1038,7 +1047,6 @@ export class BattleScene extends Phaser.Scene {
       for (const id of this.level.unlockUnits) {
         if (!save.progress.unlockedUnits.includes(id)) save.progress.unlockedUnits.push(id);
       }
-      // M2 经济：金币（星级梯度/重打减半）+ 首三星钻石 + 里程碑种子 + 能量豆
       const reward = levelClearReward({ level: this.level, stars, previousStars, totalStarsBefore });
       save.wallet.coins += reward.coins;
       save.wallet.diamonds += reward.diamonds;
@@ -1053,8 +1061,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private loseLevel(): void {
-    if (this.state === 'lost') return;
-    this.state = 'lost';
+    if (this.bt.status !== 'lost') return;
     this.persistLoss();
     this.cameras.main.shake(420, 0.012);
     this.cameras.main.flash(300, 120, 20, 20);

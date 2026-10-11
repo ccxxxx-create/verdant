@@ -3,8 +3,12 @@ import { palette, worldPalette, typography, radius, motion, withAlpha, hexToInt 
 import { readSave, writeSave, type SaveStorage } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
 import { LevelDef } from '../core/schema/level.ts';
+import type { UnitArchetype } from '../core/schema/unit.ts';
+import { registryFrom } from '../core/registry.ts';
+import { allUnits } from '../data/archetypes/index.ts';
 import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
+import { ensurePixelTextures } from './BattleScene.ts';
 import level11 from '../data/levels/meadow-1-1.json';
 import level12 from '../data/levels/meadow-1-2.json';
 import level13 from '../data/levels/meadow-1-3.json';
@@ -27,6 +31,12 @@ export class MenuScene extends Phaser.Scene {
   private hintTimer?: Phaser.Time.TimerEvent;
   private save?: SaveGame;
   private pickerParts: Phaser.GameObjects.GameObject[] = [];
+  private unitById: ReadonlyMap<string, UnitArchetype> = new Map();
+  private deckParts: Phaser.GameObjects.GameObject[] = [];
+  private pendingLevel?: LevelDef;
+  private pickedDeck: string[] = [];
+  private pickedFrame?: Phaser.GameObjects.Graphics;
+  private deckCountText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Menu');
@@ -37,11 +47,18 @@ export class MenuScene extends Phaser.Scene {
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     // 场景重启清理：选关层部件已被 shutdown 销毁，残留引用会挡住二次打开（防二次进入冻结，同 M1B P0 教训）
     this.pickerParts = [];
+    this.deckParts = [];
+    this.pendingLevel = undefined;
+    this.pickedDeck = [];
+    this.pickedFrame = undefined;
+    this.deckCountText = undefined;
     this.hint = undefined;
     this.hintTimer?.remove();
     this.hintTimer = undefined;
 
+    this.unitById = registryFrom(allUnits, []).unitById;
     for (const [name, sprite] of Object.entries(pixelIcons)) bakePixelTexture(this, `icon_${name}`, sprite, 4);
+    ensurePixelTextures(this); // 选卡面板需 unit_ 纹理（幂等）
     this.drawBackdrop(width);
     this.drawTopBar(width);
     this.drawAdventureCard(width);
@@ -331,8 +348,13 @@ export class MenuScene extends Phaser.Scene {
           return;
         }
         this.closeLevelPicker();
-        this.registry.set('level', parsed.data);
-        this.scene.start('Battle');
+        // 传送带关无选卡（M3-D2：手牌全来自传送带）；普通关先进选卡面板（W6）
+        if (parsed.data.template === 'conveyor') {
+          this.registry.set('level', parsed.data);
+          this.scene.start('Battle');
+          return;
+        }
+        this.openDeckPicker(parsed.data);
       });
     });
 
@@ -349,6 +371,149 @@ export class MenuScene extends Phaser.Scene {
   private closeLevelPicker(): void {
     for (const go of this.pickerParts) go.destroy();
     this.pickerParts = [];
+  }
+
+  // —— 局前选卡面板（W6 简化版）：owned 中勾选 ≤8，默认全选截前 8（M3-D1）——
+  // 纪律：交互 zone 场景级；部件统一 deckParts 管理（场景重启清理，同选关层）。
+  private openDeckPicker(level: LevelDef): void {
+    if (this.deckParts.length > 0) return;
+    const { width } = this.scale.gameSize;
+    this.pendingLevel = level;
+    const add = <T extends Phaser.GameObjects.GameObject>(go: T): T => {
+      this.deckParts.push(go);
+      return go;
+    };
+
+    const owned = this.save?.progress.unlockedUnits.length ? this.save.progress.unlockedUnits : ['firefly_reed', 'thorn_pea'];
+    const ownedDefs = owned
+      .map((id) => this.unitById.get(id))
+      .filter((u): u is UnitArchetype => !!u);
+    this.pickedDeck = ownedDefs.map((u) => u.id).slice(0, 8); // 默认全选截前 8
+
+    add(this.add.rectangle(width / 2, 540, width, 1080, 0x26402f, 0.55).setDepth(50).setInteractive());
+    const pw = 1080;
+    const ph = 720; // 3 行卡 + 计数 + 按钮（防第三行与按钮重叠）
+    const px = (width - pw) / 2;
+    const py = 200;
+    const panel = add(this.add.graphics().setDepth(51));
+    panel.fillStyle(0xffffff, 0.97);
+    panel.fillRoundedRect(px, py, pw, ph, radius.lg);
+    panel.lineStyle(3, hexToInt(worldPalette.meadow), 1);
+    panel.strokeRoundedRect(px, py, pw, ph, radius.lg);
+    add(
+      this.add
+        .text(width / 2, py + 42, '选择出战卡组', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '30px', fontStyle: 'bold', color: palette.bgDeep })
+        .setOrigin(0.5)
+        .setDepth(52),
+    );
+    add(
+      this.add
+        .text(width / 2, py + 76, `${level.id} · ${level.waves} 波 · 点击卡片勾选，最多 8 张`, { ...typography.caption, color: palette.bgDeep })
+        .setOrigin(0.5)
+        .setDepth(52)
+        .setAlpha(0.7),
+    );
+
+    this.pickedFrame = add(this.add.graphics().setDepth(53));
+
+    const cw = 118;
+    const ch = 150;
+    const gap = 18;
+    const cols = 5;
+    const gridW = cols * cw + (cols - 1) * gap;
+    const startX = width / 2 - gridW / 2;
+    const gridY = py + 104;
+    this.deckCountText = add(
+      this.add
+        .text(width / 2, py + ph - 128, '', { ...typography.body, color: palette.bgDeep })
+        .setOrigin(0.5)
+        .setDepth(52),
+    );
+
+    ownedDefs.forEach((u, i) => {
+      const cx = startX + (i % cols) * (cw + gap);
+      const cy = gridY + Math.floor(i / cols) * (ch + 14);
+      const card = add(this.add.container(cx, cy).setDepth(52));
+      const g = this.add.graphics();
+      g.fillStyle(0xffffff, 1);
+      g.fillRoundedRect(0, 0, cw, ch, radius.md);
+      g.lineStyle(2, hexToInt(palette.bgDeep), 0.25);
+      g.strokeRoundedRect(0, 0, cw, ch, radius.md);
+      card.add(g);
+      card.add(this.add.image(cw / 2, 56, `unit_${u.id}`).setScale(1.3));
+      card.add(this.add.text(cw / 2, ch - 26, String(u.cost), { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '16px', fontStyle: 'bold', color: palette.bgDeep }).setOrigin(0.5));
+      const hit = add(this.add.zone(cx, cy, cw, ch).setOrigin(0, 0).setDepth(54).setInteractive({ useHandCursor: true }));
+      hit.on('pointerup', () => {
+        const idx = this.pickedDeck.indexOf(u.id);
+        if (idx >= 0) {
+          this.pickedDeck.splice(idx, 1);
+        } else if (this.pickedDeck.length >= 8) {
+          this.showHint(width / 2, py + ph + 40, '最多携带 8 张卡（PvZ 种子槽口径）');
+          return;
+        } else {
+          this.pickedDeck.push(u.id);
+        }
+        this.redrawPickedFrames(startX, gridY, cw, ch, gap, ownedDefs);
+      });
+    });
+    this.redrawPickedFrames(startX, gridY, cw, ch, gap, ownedDefs);
+
+    // 出战按钮（至少 1 张）
+    const bw = 300;
+    const bx = width / 2 - bw / 2;
+    const by = py + ph - 92;
+    const btnG = add(this.add.graphics().setDepth(52));
+    btnG.fillStyle(Phaser.Display.Color.HexStringToColor(palette.primary).color, 1);
+    btnG.fillRoundedRect(bx, by, bw, 64, radius.md);
+    add(
+      this.add
+        .text(width / 2, by + 32, '出 战', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '26px', fontStyle: 'bold', color: '#FFFFFF' })
+        .setOrigin(0.5)
+        .setDepth(52),
+    );
+    const btnHit = add(this.add.zone(bx, by, bw, 64).setOrigin(0, 0).setDepth(54).setInteractive({ useHandCursor: true }));
+    btnHit.on('pointerup', () => {
+      if (!this.pendingLevel) return;
+      if (this.pickedDeck.length === 0) {
+        this.showHint(width / 2, py + ph + 40, '至少选择 1 张卡再出战');
+        return;
+      }
+      this.registry.set('level', this.pendingLevel);
+      this.registry.set('deck', [...this.pickedDeck]);
+      this.closeDeckPicker();
+      this.scene.start('Battle');
+    });
+
+    const closeX = px + pw - 40;
+    const closeY = py + 40;
+    const cg = add(this.add.graphics().setDepth(52));
+    cg.fillStyle(hexToInt(palette.bgDeep), 0.12);
+    cg.fillCircle(closeX, closeY, 22);
+    add(this.add.text(closeX, closeY, '✕', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '24px', fontStyle: 'bold', color: palette.bgDeep }).setOrigin(0.5).setDepth(52));
+    const closeHit = add(this.add.zone(closeX - 24, closeY - 24, 48, 48).setOrigin(0, 0).setDepth(54).setInteractive({ useHandCursor: true }));
+    closeHit.on('pointerup', () => this.closeDeckPicker());
+  }
+
+  private redrawPickedFrames(startX: number, gridY: number, cw: number, ch: number, gap: number, ownedDefs: UnitArchetype[]): void {
+    this.pickedFrame?.clear();
+    if (!this.pickedFrame) return;
+    ownedDefs.forEach((u, i) => {
+      if (!this.pickedDeck.includes(u.id)) return;
+      const cx = startX + (i % 5) * (cw + gap);
+      const cy = gridY + Math.floor(i / 5) * (ch + 14);
+      this.pickedFrame?.lineStyle(4, 0xf2c14e, 1);
+      this.pickedFrame?.strokeRoundedRect(cx - 2, cy - 2, cw + 4, ch + 4, 10);
+    });
+    this.deckCountText?.setText(`已选 ${this.pickedDeck.length} / 8`);
+  }
+
+  private closeDeckPicker(): void {
+    for (const go of this.deckParts) go.destroy();
+    this.deckParts = [];
+    this.pendingLevel = undefined;
+    this.pickedDeck = [];
+    this.pickedFrame = undefined;
+    this.deckCountText = undefined;
   }
 
   private showHint(x: number, y: number, msg: string): void {
