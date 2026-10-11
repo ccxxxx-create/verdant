@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import type { UnitArchetype, EnemyArchetype } from '../../core/schema/unit.ts';
 import { palette, typography, radius, motion, withAlpha, hexToInt, TOUCH_TARGET_MIN } from '../tokens.ts';
+import { KIT } from './kit.ts';
 
-/** 图鉴/编成共用的卡片底板：白卡+主题色描边，无卡片套卡片（检查项）。 */
+/** 图鉴/编成共用的卡片底板（M3B 像素语言）：纸底+语义色描边+实色偏移投影。 */
 export function cardFrame(
   scene: Phaser.Scene,
   w: number,
@@ -10,10 +11,12 @@ export function cardFrame(
   color: string,
 ): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
-  g.fillStyle(0xffffff, 0.78);
-  g.fillRoundedRect(0, 0, w, h, radius.lg);
+  g.fillStyle(KIT.shadow, 0.3);
+  g.fillRoundedRect(0, 5, w, h, 6);
+  g.fillStyle(KIT.paper, 0.97);
+  g.fillRoundedRect(0, 0, w, h, 6);
   g.lineStyle(3, Phaser.Display.Color.HexStringToColor(color).color, 1);
-  g.strokeRoundedRect(0, 0, w, h, radius.lg);
+  g.strokeRoundedRect(0, 0, w, h, 6);
   return g;
 }
 

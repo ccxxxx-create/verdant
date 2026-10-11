@@ -9,6 +9,7 @@ import { allUnits } from '../data/archetypes/index.ts';
 import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
 import { ensurePixelTextures } from './BattleScene.ts';
+import { drawPixelBackdrop, pixelPanel, pixelButton, sceneEnter, breathe, pressable, KIT } from '../ui/components/kit.ts';
 import level11 from '../data/levels/meadow-1-1.json';
 import level12 from '../data/levels/meadow-1-2.json';
 import level13 from '../data/levels/meadow-1-3.json';
@@ -59,22 +60,12 @@ export class MenuScene extends Phaser.Scene {
     this.unitById = registryFrom(allUnits, []).unitById;
     for (const [name, sprite] of Object.entries(pixelIcons)) bakePixelTexture(this, `icon_${name}`, sprite, 4);
     ensurePixelTextures(this); // 选卡面板需 unit_ 纹理（幂等）
-    this.drawBackdrop(width);
+    drawPixelBackdrop(this);
     this.drawTopBar(width);
     this.drawAdventureCard(width);
     this.drawModeRow(width);
     this.drawBottomBar(width, height);
-  }
-
-  // —— 背景：纯色底 + 像素网格点阵（像素风签名） ——
-  private drawBackdrop(width: number): void {
-    const g = this.add.graphics();
-    for (let x = 40; x < width; x += 80) {
-      for (let y = 40; y < 1040; y += 80) {
-        g.fillStyle(0x1e4a3b, 1);
-        g.fillRect(x, y, 4, 4);
-      }
-    }
+    sceneEnter(this);
   }
 
   // —— 顶部：玩家档卡 + 资源 ——
@@ -86,13 +77,7 @@ export class MenuScene extends Phaser.Scene {
     const level = 1 + Math.floor(stars / 10);
     const xpInLevel = (stars % 10) / 10;
 
-    const bar = this.add.container(60, 44);
-    const g = this.add.graphics();
-    g.fillStyle(0xffffff, 0.72);
-    g.fillRoundedRect(0, 0, width - 120, 96, radius.lg);
-    g.lineStyle(2, hexToInt(palette.bgDeep), 0.12);
-    g.strokeRoundedRect(0, 0, width - 120, 96, radius.lg);
-    bar.add(g);
+    const bar = pixelPanel(this, 60, 44, width - 120, 96, { depth: 2 });
 
     // 头像（露珠徽记复用）
     bar.add(this.add.image(56, 48, 'icon_sprout').setDisplaySize(56, 56));
@@ -141,13 +126,8 @@ export class MenuScene extends Phaser.Scene {
     const ch = 400;
     const cx = (width - cw) / 2;
     const cy = 180;
-    const card = this.add.container(cx, cy);
-    const g = this.add.graphics();
-    g.fillStyle(0xffffff, 0.8);
-    g.fillRoundedRect(0, 0, cw, ch, radius.lg);
-    g.lineStyle(3, Phaser.Display.Color.HexStringToColor(worldPalette.meadow).color, 1);
-    g.strokeRoundedRect(0, 0, cw, ch, radius.lg);
-    card.add(g);
+    const card = pixelPanel(this, cx, cy, cw, ch, { depth: 2, stroke: hexToInt(worldPalette.meadow) });
+    breathe(this, card);
     card.add(this.add.image(cw / 2, 150, 'icon_mountain').setDisplaySize(128, 128));
     card.add(
       this.add.text(cw / 2, 250, '巡 野 图', {
@@ -194,13 +174,11 @@ export class MenuScene extends Phaser.Scene {
     const startX = (width - (bw * 4 + gap * 3)) / 2;
     const y = 640;
     modes.forEach((m, i) => {
-      const btn = this.add.container(startX + i * (bw + gap), y);
-      const g = this.add.graphics();
-      g.fillStyle(0xffffff, m.ready ? 0.8 : 0.45);
-      g.fillRoundedRect(0, 0, bw, bh, radius.lg);
-      g.lineStyle(3, hexToInt(m.ready ? m.color : palette.bgDeep), m.ready ? 1 : 0.2);
-      g.strokeRoundedRect(0, 0, bw, bh, radius.lg);
-      btn.add(g);
+      const btn = pixelPanel(this, startX + i * (bw + gap), y, bw, bh, { depth: 2, stroke: hexToInt(m.ready ? m.color : KIT.outlineCss), shadow: m.ready });
+      if (!m.ready) btn.setAlpha(0.55);
+      const hit = this.add.zone(startX + i * (bw + gap), y, bw, Math.max(bh, 48)).setOrigin(0, 0).setDepth(3).setInteractive({ useHandCursor: m.ready });
+      this.pickerParts.push(hit);
+      pressable(this, hit, btn, m.ready);
       btn.add(this.add.image(bw / 2, 46, `icon_${(m.icon ?? 'sprout')}`).setDisplaySize(48, 48));
       btn.add(
         this.add
@@ -213,11 +191,6 @@ export class MenuScene extends Phaser.Scene {
           .setOrigin(0.5)
           .setAlpha(m.ready ? 0.6 : 0.35),
       );
-      const hit = this.add.zone(0, 0, bw, Math.max(bh, 48)).setOrigin(0, 0);
-      btn.add(hit);
-      hit.setInteractive({ useHandCursor: m.ready });
-      hit.on('pointerover', () => m.ready && this.tweens.add({ targets: btn, scale: 1.02, duration: motion.feedback }));
-      hit.on('pointerout', () => this.tweens.add({ targets: btn, scale: 1, duration: motion.feedback }));
       hit.on('pointerup', () => {
         if (m.action === 'codex') {
           this.scene.start('Codex');
@@ -252,25 +225,18 @@ export class MenuScene extends Phaser.Scene {
     const gap = 24;
     const startX = (width - (bw * 3 + gap * 2)) / 2;
     items.forEach((it, i) => {
-      const btn = this.add.container(startX + i * (bw + gap), y);
-      const g = this.add.graphics();
-      g.fillStyle(0xffffff, 0.55);
-      g.fillRoundedRect(0, 0, bw, 56, radius.md);
-      g.lineStyle(2, hexToInt(palette.bgDeep), 0.2);
-      g.strokeRoundedRect(0, 0, bw, 56, radius.md);
-      btn.add(g);
-      btn.add(this.add.image(bw / 2 - 52, 28, `icon_${(it.icon ?? 'settings')}`).setDisplaySize(28, 28));
-      btn.add(this.add.text(bw / 2 + 12, 28, it.label, { ...typography.body, color: palette.bgDeep }).setOrigin(0.5).setAlpha(0.8));
-      const hit = this.add.zone(0, 0, bw, 56).setOrigin(0, 0);
-      btn.add(hit);
-      hit.setInteractive({ useHandCursor: true });
+      pixelPanel(this, startX + i * (bw + gap), y, bw, 56, { depth: 2, radius: 4 });
+      this.add.image(startX + i * (bw + gap) + bw / 2 - 52, y + 28, `icon_${(it.icon ?? 'settings')}`).setDisplaySize(28, 28).setDepth(3);
+      this.add
+        .text(startX + i * (bw + gap) + bw / 2 + 12, y + 28, it.label, { ...typography.body, color: KIT.textDark })
+        .setOrigin(0.5)
+        .setAlpha(0.85)
+        .setDepth(3);
+      const hit = this.add.zone(startX + i * (bw + gap), y, bw, 56).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
+      this.pickerParts.push(hit);
       hit.on('pointerup', () => this.showHint(width / 2, y - 28, it.msg));
     });
 
-    this.add
-      .text(width / 2, y + 76, 'VERDANT · v0.1.0 · M1C', { ...typography.caption, color: palette.bgDeep })
-      .setOrigin(0.5)
-      .setAlpha(0.4);
   }
 
   // —— 选关层（M1C：草原 1-1~1-5，渐进解锁）——
@@ -288,11 +254,8 @@ export class MenuScene extends Phaser.Scene {
     const ph = 470;
     const px = (width - pw) / 2;
     const py = 300;
-    const panel = add(this.add.graphics().setDepth(51));
-    panel.fillStyle(0xffffff, 0.97);
-    panel.fillRoundedRect(px, py, pw, ph, radius.lg);
-    panel.lineStyle(3, hexToInt(worldPalette.meadow), 1);
-    panel.strokeRoundedRect(px, py, pw, ph, radius.lg);
+    const panel = pixelPanel(this, px, py, pw, ph, { depth: 51, stroke: hexToInt(worldPalette.meadow) });
+    add(panel);
     add(
       this.add
         .text(width / 2, py + 46, '晨雾草原 · 选择关卡', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '30px', fontStyle: 'bold', color: palette.bgDeep })
@@ -313,10 +276,12 @@ export class MenuScene extends Phaser.Scene {
       const bx = startX + i * (bw + gap);
       const card = add(this.add.container(bx, by).setDepth(52));
       const g = this.add.graphics();
-      g.fillStyle(0xffffff, 1);
-      g.fillRoundedRect(0, 0, bw, bh, radius.md);
-      g.lineStyle(3, unlocked ? hexToInt(worldPalette.meadow) : hexToInt(palette.bgDeep), unlocked ? 1 : 0.25);
-      g.strokeRoundedRect(0, 0, bw, bh, radius.md);
+      g.fillStyle(KIT.shadow, 0.3);
+      g.fillRoundedRect(0, 5, bw, bh, 6);
+      g.fillStyle(KIT.paper, 0.97);
+      g.fillRoundedRect(0, 0, bw, bh, 6);
+      g.lineStyle(3, unlocked ? hexToInt(worldPalette.meadow) : KIT.outline, unlocked ? 1 : 0.5);
+      g.strokeRoundedRect(0, 0, bw, bh, 6);
       card.add(g);
       card.add(
         this.add
@@ -395,11 +360,8 @@ export class MenuScene extends Phaser.Scene {
     const ph = 720; // 3 行卡 + 计数 + 按钮（防第三行与按钮重叠）
     const px = (width - pw) / 2;
     const py = 200;
-    const panel = add(this.add.graphics().setDepth(51));
-    panel.fillStyle(0xffffff, 0.97);
-    panel.fillRoundedRect(px, py, pw, ph, radius.lg);
-    panel.lineStyle(3, hexToInt(worldPalette.meadow), 1);
-    panel.strokeRoundedRect(px, py, pw, ph, radius.lg);
+    const panel = pixelPanel(this, px, py, pw, ph, { depth: 51, stroke: hexToInt(worldPalette.meadow) });
+    add(panel);
     add(
       this.add
         .text(width / 2, py + 42, '选择出战卡组', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '30px', fontStyle: 'bold', color: palette.bgDeep })
@@ -435,10 +397,12 @@ export class MenuScene extends Phaser.Scene {
       const cy = gridY + Math.floor(i / cols) * (ch + 14);
       const card = add(this.add.container(cx, cy).setDepth(52));
       const g = this.add.graphics();
-      g.fillStyle(0xffffff, 1);
-      g.fillRoundedRect(0, 0, cw, ch, radius.md);
-      g.lineStyle(2, hexToInt(palette.bgDeep), 0.25);
-      g.strokeRoundedRect(0, 0, cw, ch, radius.md);
+      g.fillStyle(KIT.shadow, 0.3);
+      g.fillRoundedRect(0, 5, cw, ch, 6);
+      g.fillStyle(KIT.paper, 0.97);
+      g.fillRoundedRect(0, 0, cw, ch, 6);
+      g.lineStyle(2, KIT.outline, 0.6);
+      g.strokeRoundedRect(0, 0, cw, ch, 6);
       card.add(g);
       card.add(this.add.image(cw / 2, 56, `unit_${u.id}`).setScale(1.3));
       card.add(this.add.text(cw / 2, ch - 26, String(u.cost), { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '16px', fontStyle: 'bold', color: palette.bgDeep }).setOrigin(0.5));

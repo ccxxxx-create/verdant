@@ -4,15 +4,19 @@ import { ensurePixelTextures } from './BattleScene.ts';
 import { UNIT_ACQUISITION } from '../data/economy.ts';
 import { readSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
-import { palette, typography, radius, hexToInt } from '../ui/tokens.ts';
+import { drawPixelBackdrop, pixelPanel, pixelButton, walletBar, sceneHeader, sceneEnter, KIT } from '../ui/components/kit.ts';
+import { ROLE_LABEL } from '../ui/components/cards.ts';
 
-
-const C_DARK = '#26402F';
-const WALLET_ICON: Record<string, string> = { coins: 'icon_coin', diamonds: 'icon_diamond', seeds: 'icon_seed', plantFood: 'icon_energy' };
-const WALLET_LABEL: Record<string, string> = { coins: '金币', diamonds: '钻石', seeds: '种子', plantFood: '能量豆' };
+const CHANNEL_STROKE: Record<string, number> = {
+  coins: 0xd9a53a, // 金币购：晨金
+  diamonds: 0x8e6fd8, // 钻石购：紫
+  gift: 0x6fa86b, // 赠送：草绿
+};
+const CHANNEL_LABEL: Record<string, string> = { coins: '金币购', diamonds: '钻石购', gift: '关卡赠送' };
 
 /**
- * 商店场景（M2 E5）：13 角色一览，赠送/金币购/钻石购三渠道，购买即时入档。
+ * 商店场景（M2 E5 建，M3B 统一像素语言）：13 角色三渠道，购买即时入档。
+ * 卡片结构（M3B 重排修复文字重叠）：立绘独立图区（左 96px）+ 右侧文字栏 + 底部 flavor + 右下购买钮。
  * 交互纪律：命中 zone 全部场景级（容器子 zone 在 depth>0 命中不可靠——选关层教训）。
  */
 export class ShopScene extends Phaser.Scene {
@@ -28,9 +32,11 @@ export class ShopScene extends Phaser.Scene {
     this.parts = []; // restart 不残留上轮引用（审查 P2-3）
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     const { width } = this.scale.gameSize;
-    this.drawBackdrop(width);
-    this.drawWallet(width);
+    drawPixelBackdrop(this);
+    sceneHeader(this, '商店 · 生灵集市', { subtitle: 'VERDANT SHOP · 角色获取' });
+    walletBar(this, 60, 128, width - 120, this.save?.wallet ? { wallet: this.save.wallet } : undefined);
     this.drawUnits(width);
+    sceneEnter(this);
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('Menu'));
   }
 
@@ -39,98 +45,83 @@ export class ShopScene extends Phaser.Scene {
     return go;
   }
 
-  private drawBackdrop(width: number): void {
-    const g = this.add.graphics();
-    for (let x = 40; x < width; x += 80) {
-      for (let y = 40; y < 1040; y += 80) {
-        g.fillStyle(0x1e4a3b, 1);
-        g.fillRect(x, y, 4, 4);
-      }
-    }
-  }
-
-  private drawWallet(width: number): void {
-    const wallet = this.save?.wallet;
-    const bar = this.track(this.add.graphics().setDepth(2));
-    bar.fillStyle(0xffffff, 0.85);
-    bar.fillRoundedRect(60, 44, width - 120, 96, radius.lg);
-    this.track(this.add.text(96, 92, '商店 · 生灵集市', { ...typography.heading, fontSize: '28px', color: C_DARK }).setOrigin(0, 0.5).setDepth(3));
-    if (!wallet) {
-      this.track(this.add.text(width / 2, 92, '存档读取失败', { ...typography.body, color: C_DARK }).setOrigin(0.5).setDepth(3));
-      return;
-    }
-    const entries: [string, number][] = [
-      ['coins', wallet.coins],
-      ['diamonds', wallet.diamonds],
-      ['seeds', wallet.seeds],
-      ['plantFood', wallet.plantFood],
-    ];
-    entries.forEach(([key, val], i) => {
-      const x = width - 880 + i * 220;
-      this.track(this.add.image(x, 92, WALLET_ICON[key] ?? 'icon_coin').setScale(1.4).setDepth(3));
-      this.track(this.add.text(x + 52, 92, `${WALLET_LABEL[key]} ${val}`, { ...typography.body, fontSize: '17px', color: C_DARK }).setOrigin(0, 0.5).setDepth(3));
-    });
-  }
-
   private drawUnits(width: number): void {
     const owned = this.save?.progress.unlockedUnits ?? [];
     const cols = 5;
     const cw = 300;
-    const ch = 230;
-    const gap = 40;
-    const startX = (width - (cw * cols + gap * (cols - 1))) / 2;
-    const y0 = 170;
-    allUnits.forEach((u, i) => {
+    const ch = 250;
+    const gap = 30;
+    const list = allUnits.filter((u) => UNIT_ACQUISITION[u.id]);
+    const rows = Math.ceil(list.length / cols);
+    const gridW = cols * cw + (cols - 1) * gap;
+    const y0 = 250;
+    list.forEach((u, i) => {
       const acq = UNIT_ACQUISITION[u.id];
       if (!acq) return;
       const isOwned = owned.includes(u.id);
-      const x = startX + (i % cols) * (cw + gap);
-      const y = y0 + Math.floor(i / cols) * (ch + gap);
+      const row = Math.floor(i / cols);
+      const inRow = row < rows - 1 ? cols : list.length - cols * (rows - 1);
+      // 末行居中（消除右侧空白）
+      const rowW = inRow * cw + (inRow - 1) * gap;
+      const rowX = (width - rowW) / 2;
+      const x = rowX + (i % cols) * (cw + gap);
+      const y = y0 + row * (ch + gap);
+
+      const stroke = CHANNEL_STROKE[acq.channel] ?? KIT.outline;
       const card = this.track(this.add.container(x, y).setDepth(2));
       const g = this.add.graphics();
-      g.fillStyle(0xffffff, isOwned ? 0.92 : 0.82);
-      g.fillRoundedRect(0, 0, cw, ch, radius.lg);
-      g.lineStyle(3, hexToInt(acq.channel === 'diamonds' ? '#8E6FD8' : acq.channel === 'coins' ? '#F2C14E' : palette.primary), 1);
-      g.strokeRoundedRect(0, 0, cw, ch, radius.lg);
+      g.fillStyle(KIT.shadow, 0.3);
+      g.fillRoundedRect(0, 5, cw, ch, 6);
+      g.fillStyle(KIT.paper, 0.97);
+      g.fillRoundedRect(0, 0, cw, ch, 6);
+      g.lineStyle(3, stroke, 1);
+      g.strokeRoundedRect(0, 0, cw, ch, 6);
       card.add(g);
-      card.add(this.add.image(58, 62, `unit_${u.id}`).setScale(1.4));
-      card.add(this.add.text(104, 38, u.name, { ...typography.heading, fontSize: '21px', color: C_DARK }));
-      const pricePart = acq.channel === 'gift' ? '赠送' : acq.channel === 'coins' ? `金币 ${acq.price}` : `钻石 ${acq.price}`;
-      const channelText = `${pricePart} · ${acq.note}`; // note 含 M3 实装标注（审查 P1-1：未实装 behavior 必须明示）
-      card.add(this.add.text(104, 72, channelText, { ...typography.caption, fontSize: '14px', color: isOwned ? palette.primaryDeep : '#8A5F3C' }));
+      // 立绘图区（左上 96×96 独立区，杜绝压字）
+      const gImg = this.add.graphics();
+      gImg.fillStyle(0xffffff, 0.5);
+      gImg.fillRoundedRect(14, 14, 96, 96, 4);
+      card.add(gImg);
+      card.add(this.add.image(62, 64, `unit_${u.id}`).setScale(0.85));
+      // 右侧文字栏（立绘右缘 122 起）
+      card.add(this.add.text(122, 34, u.name, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '21px', fontStyle: 'bold', color: KIT.textDark }));
       card.add(
         this.add
-          .text(20, ch - 58, u.flavor, { ...typography.caption, fontSize: '13px', color: C_DARK })
+          .text(122, 64, ROLE_LABEL[u.role] ?? u.role, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '13px', fontStyle: 'bold', color: KIT.textDark })
+          .setAlpha(0.65),
+      );
+      const pricePart = acq.channel === 'gift' ? '赠送' : `${acq.channel === 'coins' ? '金币' : '钻石'} ${acq.price}`;
+      card.add(
+        this.add
+          .text(122, 90, pricePart, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#8A5F3C' }),
+      );
+      // flavor 底部整行
+      card.add(
+        this.add
+          .text(16, 126, u.flavor, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '13px', color: KIT.textDark })
           .setOrigin(0, 0)
           .setAlpha(0.75)
           .setWordWrapWidth(cw - 32),
       );
-      // 右上角状态：已拥有 / 关卡获取（赠送未拥有）/ 购买·差钱
+      // 渠道徽章（左下小标签）
+      card.add(
+        this.add
+          .text(16, ch - 34, CHANNEL_LABEL[acq.channel] ?? '', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '12px', color: '#8A5F3C' })
+          .setAlpha(0.85),
+      );
+      // 右下状态/购买钮（与徽章同排，互不重叠）
       if (isOwned) {
-        this.track(
-          this.add
-            .text(x + cw - 54, y + 33, '已拥有', { ...typography.body, fontSize: '15px', color: palette.primaryDeep })
-            .setOrigin(0.5)
-            .setDepth(4)
-            .setAlpha(0.9),
-        );
+        card.add(this.add.text(cw - 16, ch - 34, '已拥有', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '14px', fontStyle: 'bold', color: '#5E7A66' }).setOrigin(1, 0));
       } else if (acq.channel === 'gift') {
-        this.track(
-          this.add
-            .text(x + cw - 66, y + 33, '关卡获取', { ...typography.body, fontSize: '15px', color: '#8A5F3C' })
-            .setOrigin(0.5)
-            .setDepth(4)
-            .setAlpha(0.9),
-        );
+        card.add(this.add.text(cw - 16, ch - 34, '通关解锁', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '14px', color: '#8A5F3C' }).setOrigin(1, 0));
       } else if (acq.price !== undefined) {
         const canBuy = acq.channel === 'coins' ? (this.save?.wallet.coins ?? 0) >= acq.price : (this.save?.wallet.diamonds ?? 0) >= acq.price;
-        const btnG = this.add.graphics().setDepth(3);
-        btnG.fillStyle(hexToInt(canBuy ? '#57C173' : '#B3AD9C'), 1);
-        btnG.fillRoundedRect(x + cw - 108, y + 12, 96, 42, 8);
-        this.track(btnG);
-        this.track(this.add.text(x + cw - 60, y + 33, canBuy ? '购买' : '差钱', { ...typography.body, fontSize: '15px', color: '#FFFFFF' }).setOrigin(0.5).setDepth(4));
-        const hit = this.track(this.add.zone(x + cw - 108, y + 12, 96, 42).setOrigin(0, 0).setDepth(5).setInteractive({ useHandCursor: canBuy }));
-        hit.on('pointerup', () => this.buy(u, acq.channel as 'coins' | 'diamonds', acq.price as number));
+        pixelButton(this, cw - 116, ch - 54, 100, 42, canBuy ? '购买' : '差钱', {
+          depth: 4,
+          accent: canBuy ? 0x6fbf83 : 0xb3ad9c,
+          enabled: canBuy,
+          onClick: () => this.buy(u, acq.channel as 'coins' | 'diamonds', acq.price as number),
+        });
       }
     });
   }
@@ -154,7 +145,7 @@ export class ShopScene extends Phaser.Scene {
     }
     this.registry.set('save', save);
     if (!ok) {
-      this.track(this.add.text(960, 1020, '存档写入失败（浏览器存储不可用），本次购买未保存', { ...typography.body, color: '#B23A2E' }).setOrigin(0.5).setDepth(20));
+      this.track(this.add.text(960, 1020, '存档写入失败（浏览器存储不可用），本次购买未保存', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '16px', color: '#B23A2E' }).setOrigin(0.5).setDepth(20));
       return;
     }
     this.scene.restart();

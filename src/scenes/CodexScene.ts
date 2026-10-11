@@ -7,6 +7,7 @@ import { codexTerrainRules, codexCounters } from '../data/codex/terrain.ts';
 import type { UnitArchetype, EnemyArchetype } from '../core/schema/unit.ts';
 import { palette, worldPalette, typography, radius, motion, spacing, withAlpha, hexToInt } from '../ui/tokens.ts';
 import { CARD_W, CARD_H, createUnitCard, createEnemyCard, ARMOR_LABEL, ARMOR_COLOR, ROLE_LABEL, ROLE_COLOR } from '../ui/components/cards.ts';
+import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, KIT } from '../ui/components/kit.ts';
 
 type TabId = 'units' | 'enemies' | 'worlds' | 'terrain';
 
@@ -62,42 +63,12 @@ export class CodexScene extends Phaser.Scene {
 
   create(): void {
     const { width } = this.scale.gameSize;
-    this.drawBackdrop(width);
-    this.drawHeader(width);
+    drawPixelBackdrop(this);
+    sceneHeader(this, '图鉴', { subtitle: 'VERDANT CODEX · 收录 51 生灵 / 44 怪兽' });
     this.drawTabs(width);
     this.renderTab(width);
     this.bindScroll();
-  }
-
-  // —— 背景（签名雾带降透明度复用） ——
-  private drawBackdrop(width: number): void {
-    const g = this.add.graphics();
-    for (let x = 40; x < width; x += 80) {
-      for (let y = 40; y < 1040; y += 80) {
-        g.fillStyle(0x1e4a3b, 1);
-        g.fillRect(x, y, 4, 4);
-      }
-    }
-  }
-
-  private drawHeader(width: number): void {
-    const back = this.add.container(60, 56);
-    const g = this.add.graphics();
-    g.fillStyle(0xffffff, 0.7);
-    g.fillRoundedRect(0, 0, 120, 52, radius.md);
-    g.lineStyle(2, Phaser.Display.Color.HexStringToColor(palette.primaryDeep).color, 1);
-    g.strokeRoundedRect(0, 0, 120, 52, radius.md);
-    back.add(g);
-    back.add(this.add.text(60, 26, '← 返回', { ...typography.body, color: palette.primaryDeep }).setOrigin(0.5));
-    back.setSize(120, 52);
-    back.setInteractive({ useHandCursor: true });
-    back.on('pointerup', () => this.scene.start('Menu'));
-
-    this.add.text(210, 60, '图鉴', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '34px', fontStyle: 'bold', color: palette.primaryDeep });
-    this.add
-      .text(width - 60, 72, 'VERDANT CODEX · 收录 51 生灵 / 44 怪兽', { ...typography.caption, color: palette.bgDeep })
-      .setOrigin(1, 0.5)
-      .setAlpha(0.55);
+    sceneEnter(this);
   }
 
   private drawTabs(width: number): void {
@@ -108,13 +79,15 @@ export class CodexScene extends Phaser.Scene {
     const startX = 60;
     this.tabChips = ids.map((id, i) => {
       const x = startX + i * (chipW + gap);
-      const chip = this.add.container(x, 140);
+      const chip = this.add.container(x, 132);
       const g = this.add.graphics();
       const active = this.tab === id;
-      g.fillStyle(Phaser.Display.Color.HexStringToColor(active ? palette.primaryDeep : '#FFFFFF').color, active ? 1 : 0.65);
-      g.fillRoundedRect(0, 0, chipW, 56, radius.md);
-      g.lineStyle(2, hexToInt(active ? palette.primaryDeep : palette.bgDeep), active ? 1 : 0.25);
-      g.strokeRoundedRect(0, 0, chipW, 56, radius.md);
+      g.fillStyle(KIT.shadow, 0.3);
+      g.fillRoundedRect(0, 5, chipW, 56, 6);
+      g.fillStyle(active ? KIT.woodLight : KIT.paper, 1);
+      g.fillRoundedRect(0, 0, chipW, 56, 6);
+      g.lineStyle(3, KIT.outline, active ? 1 : 0.7);
+      g.strokeRoundedRect(0, 0, chipW, 56, 6);
       chip.add(g);
       chip.add(
         this.add
@@ -122,7 +95,7 @@ export class CodexScene extends Phaser.Scene {
             fontFamily: 'system-ui, "PingFang SC", sans-serif',
             fontSize: '18px',
             fontStyle: 'bold',
-            color: active ? '#FFFFFF' : palette.bgDeep,
+            color: KIT.textDark,
           })
           .setOrigin(0.5),
       );
@@ -172,36 +145,44 @@ export class CodexScene extends Phaser.Scene {
     const cols = 6;
     const gapX = 24;
     const gapY = 28;
-    const startX = (width - (cols * CARD_W + (cols - 1) * gapX)) / 2;
     const registry = registryFrom(allUnits, allEnemies);
+    const rows = Math.ceil(registry.units.length / cols);
+    const lastRow = registry.units.length - cols * (rows - 1);
     registry.units.forEach((u, i) => {
-      const col = i % cols;
       const row = Math.floor(i / cols);
-      const card = createUnitCard(this, startX + col * (CARD_W + gapX), 240 + row * (CARD_H + gapY), u, (sel) =>
+      const inRow = row < rows - 1 ? cols : lastRow;
+      const rowW = inRow * CARD_W + (inRow - 1) * gapX;
+      const rowX = (width - rowW) / 2; // 末行居中（消除右侧空白）
+      const col = i % cols;
+      const card = createUnitCard(this, rowX + col * (CARD_W + gapX), 232 + row * (CARD_H + gapY), u, (sel) =>
         this.showUnitDetail(sel, width),
       );
       content.add(card);
     });
-    const rows = Math.ceil(registry.units.length / cols);
-    this.setupScroll(content, Math.max(0, rows * (CARD_H + gapY) - gapY - 800 + 60));
+    this.setupScroll(content, Math.max(0, rows * (CARD_H + gapY) - gapY - 792));
+    this.tweens.add({ targets: content, alpha: { from: 0, to: 1 }, duration: 200 });
   }
 
   private renderEnemyGrid(content: Phaser.GameObjects.Container, width: number): void {
     const cols = 6;
     const gapX = 24;
     const gapY = 28;
-    const startX = (width - (cols * CARD_W + (cols - 1) * gapX)) / 2;
     const registry = registryFrom(allUnits, allEnemies);
+    const rows = Math.ceil(registry.enemies.length / cols);
+    const lastRow = registry.enemies.length - cols * (rows - 1);
     registry.enemies.forEach((e, i) => {
-      const col = i % cols;
       const row = Math.floor(i / cols);
-      const card = createEnemyCard(this, startX + col * (CARD_W + gapX), 240 + row * (CARD_H + gapY), e, (sel) =>
+      const inRow = row < rows - 1 ? cols : lastRow;
+      const rowW = inRow * CARD_W + (inRow - 1) * gapX;
+      const rowX = (width - rowW) / 2;
+      const col = i % cols;
+      const card = createEnemyCard(this, rowX + col * (CARD_W + gapX), 232 + row * (CARD_H + gapY), e, (sel) =>
         this.showEnemyDetail(sel, width),
       );
       content.add(card);
     });
-    const rows = Math.ceil(registry.enemies.length / cols);
-    this.setupScroll(content, Math.max(0, rows * (CARD_H + gapY) - gapY - 800 + 60));
+    this.setupScroll(content, Math.max(0, rows * (CARD_H + gapY) - gapY - 792));
+    this.tweens.add({ targets: content, alpha: { from: 0, to: 1 }, duration: 200 });
   }
 
   private setupScroll(content: Phaser.GameObjects.Container, contentH: number): void {
@@ -241,8 +222,10 @@ export class CodexScene extends Phaser.Scene {
       const card = this.add.container(x, y);
       const col2 = worldPalette[w.themeKey];
       const g = this.add.graphics();
-      g.fillStyle(0xffffff, 0.78);
-      g.fillRoundedRect(0, 0, cardW, cardH, radius.lg);
+      g.fillStyle(KIT.shadow, 0.3);
+      g.fillRoundedRect(0, 5, cardW, cardH, 6);
+      g.fillStyle(KIT.paper, 0.97);
+      g.fillRoundedRect(0, 0, cardW, cardH, 6);
       g.lineStyle(3, Phaser.Display.Color.HexStringToColor(col2).color, 1);
       g.strokeRoundedRect(0, 0, cardW, cardH, radius.lg);
       card.add(g);
@@ -271,8 +254,10 @@ export class CodexScene extends Phaser.Scene {
       const row = Math.floor(i / 2);
       const card = this.add.container(startX + col * (cardW + gap), 240 + row * (cardH + gap));
       const g = this.add.graphics();
-      g.fillStyle(0xffffff, 0.78);
-      g.fillRoundedRect(0, 0, cardW, cardH, radius.lg);
+      g.fillStyle(KIT.shadow, 0.3);
+      g.fillRoundedRect(0, 5, cardW, cardH, 6);
+      g.fillStyle(KIT.paper, 0.97);
+      g.fillRoundedRect(0, 0, cardW, cardH, 6);
       g.lineStyle(3, Phaser.Display.Color.HexStringToColor(palette.primaryDeep).color, 1);
       g.strokeRoundedRect(0, 0, cardW, cardH, radius.lg);
       card.add(g);
@@ -290,10 +275,12 @@ export class CodexScene extends Phaser.Scene {
     const tableY = 240 + 2 * (cardH + gap);
     const table = this.add.container(startX, tableY);
     const g = this.add.graphics();
-    g.fillStyle(0xffffff, 0.6);
-    g.fillRoundedRect(0, 0, cardW * 2 + gap, 240, radius.lg);
-    g.lineStyle(2, hexToInt(palette.bgDeep), 0.25);
-    g.strokeRoundedRect(0, 0, cardW * 2 + gap, 240, radius.lg);
+    g.fillStyle(KIT.shadow, 0.3);
+    g.fillRoundedRect(0, 5, cardW * 2 + gap, 240, 6);
+    g.fillStyle(KIT.paper, 0.97);
+    g.fillRoundedRect(0, 0, cardW * 2 + gap, 240, 6);
+    g.lineStyle(3, KIT.outline, 0.8);
+    g.strokeRoundedRect(0, 0, cardW * 2 + gap, 240, 6);
     table.add(g);
     table.add(this.add.text(28, 20, '克制速查（伤害系数）', { ...typography.heading, color: palette.bgDeep }));
     const headers = ['攻击类型', '布甲', '皮甲', '壳甲', '铁甲', '飞行'];
@@ -323,10 +310,12 @@ export class CodexScene extends Phaser.Scene {
     const ph = 780;
     const px = (width - pw) / 2;
     const py = (height - ph) / 2;
-    pg.fillStyle(0xffffff, 0.96);
-    pg.fillRoundedRect(px, py, pw, ph, radius.lg);
-    pg.lineStyle(3, Phaser.Display.Color.HexStringToColor(palette.primaryDeep).color, 1);
-    pg.strokeRoundedRect(px, py, pw, ph, radius.lg);
+    pg.fillStyle(KIT.shadow, 0.4);
+    pg.fillRoundedRect(px + 6, py + 8, pw, ph, 6);
+    pg.fillStyle(KIT.paper, 0.98);
+    pg.fillRoundedRect(px, py, pw, ph, 6);
+    pg.lineStyle(3, KIT.outline, 1);
+    pg.strokeRoundedRect(px, py, pw, ph, 6);
     panel.add(pg);
     // 关闭
     const close = this.add.container(px + pw - 96, py + 24);
