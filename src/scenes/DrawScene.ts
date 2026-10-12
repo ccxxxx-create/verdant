@@ -5,7 +5,7 @@ import { GACHA_COST, rollOnce, rollTen, type GachaPrize } from '../core/gacha.ts
 import { Rng } from '../core/rng.ts';
 import { readSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
-import { drawPixelBackdrop, pixelPanel, pixelButton, walletBar, sceneHeader, sceneEnter, KIT } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelPanel, pixelButton, walletBar, sceneHeader, sceneEnter, drawAmbient, KIT } from '../ui/components/kit.ts';
 
 const PRIZE_ICON: Record<GachaPrize['kind'], string> = {
   unit: 'icon_seed',
@@ -51,6 +51,7 @@ export class DrawScene extends Phaser.Scene {
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     const { width } = this.scale.gameSize;
     drawPixelBackdrop(this);
+    drawAmbient(this);
     sceneHeader(this, '生灵抽奖', { subtitle: 'VERDANT GACHA · 种子券单抽 / 钻石十连' });
     walletBar(this, 60, 128, width - 120, this.save?.wallet ? { wallet: this.save.wallet } : undefined);
     this.drawButtons(width);

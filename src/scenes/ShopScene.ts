@@ -4,7 +4,7 @@ import { ensurePixelTextures } from './BattleScene.ts';
 import { UNIT_ACQUISITION } from '../data/economy.ts';
 import { readSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
-import { drawPixelBackdrop, pixelButton, walletBar, sceneHeader, sceneEnter, KIT } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelButton, walletBar, sceneHeader, sceneEnter, drawAmbient, KIT } from '../ui/components/kit.ts';
 import { ROLE_LABEL } from '../ui/components/cards.ts';
 
 const CHANNEL_STROKE: Record<string, number> = {
@@ -33,6 +33,7 @@ export class ShopScene extends Phaser.Scene {
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     const { width } = this.scale.gameSize;
     drawPixelBackdrop(this);
+    drawAmbient(this);
     sceneHeader(this, '商店 · 生灵集市', { subtitle: 'VERDANT SHOP · 角色获取' });
     walletBar(this, 60, 128, width - 120, this.save?.wallet ? { wallet: this.save.wallet } : undefined);
     this.drawUnits(width);

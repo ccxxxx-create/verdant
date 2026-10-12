@@ -131,6 +131,11 @@ export function pixelButton(
   g.fillRoundedRect(0, 5, w, h, 6);
   g.fillStyle(enabled ? accent : 0xb3ad9c, 1);
   g.fillRoundedRect(0, 0, w, h, 6);
+  if (enabled) {
+    // 顶部高光带（受光面），商业按钮质感的核心一笔
+    g.fillStyle(0xffffff, 0.28);
+    g.fillRoundedRect(4, 3, w - 8, Math.max(8, h * 0.22), 4);
+  }
   g.lineStyle(3, KIT.outline, enabled ? 1 : 0.6);
   g.strokeRoundedRect(0, 0, w, h, 6);
   c.add(g);
@@ -213,25 +218,61 @@ export function walletBar(
   });
 }
 
-/** 场景头：返回钮 + 标题 + 右侧信息（三场景同构）。 */
+/** 场景头：返回钮 + 描边大标题（与主界面 Logo 同技法）+ 右侧信息（三场景同构）。 */
 export function sceneHeader(
   scene: Phaser.Scene,
   title: string,
   opts: { subtitle?: string; depth?: number } = {},
 ): void {
   const depth = opts.depth ?? 3;
-  const { hit, container } = pixelButton(scene, 60, 52, 148, 56, '← 返回', { depth, onClick: () => scene.scene.start('Menu') });
-  void hit;
-  void container;
+  pixelButton(scene, 60, 52, 148, 56, '← 返回', { depth, onClick: () => scene.scene.start('Menu') });
+  // 标题：投影层 + 主层（深字描边），与主菜单 Logo 呼应
+  const tx = 236;
+  const ty = 80;
   scene.add
-    .text(240, 80, title, { fontFamily: FONT, fontSize: '30px', fontStyle: 'bold', color: KIT.textDark })
+    .text(tx + 3, ty + 4, title, { fontFamily: FONT, fontSize: '34px', fontStyle: 'bold', color: '#1E3A2E' })
     .setOrigin(0, 0.5)
+    .setAlpha(0.28)
+    .setDepth(depth);
+  scene.add
+    .text(tx, ty, title, { fontFamily: FONT, fontSize: '34px', fontStyle: 'bold', color: KIT.textDark })
+    .setOrigin(0, 0.5)
+    .setStroke('#F5E9C8', 6)
     .setDepth(depth);
   if (opts.subtitle) {
     scene.add
-      .text(scene.scale.gameSize.width - 60, 80, opts.subtitle, { fontFamily: FONT, fontSize: '14px', color: KIT.textSub })
+      .text(scene.scale.gameSize.width - 60, ty, opts.subtitle, { fontFamily: FONT, fontSize: '14px', color: KIT.textSub })
       .setOrigin(1, 0.5)
       .setDepth(depth);
+  }
+}
+
+/**
+ * 氛围层（四子页共享）：淡晨光光晕 + 少量飘浮光露（Menu 全量档的弱化版，不抢内容）。
+ * opts.motes 控制粒子数（默认 7），opts.dim 再压暗一档给内容重的页面（图鉴）。
+ */
+export function drawAmbient(scene: Phaser.Scene, opts: { motes?: number; dim?: boolean } = {}): void {
+  const g = scene.add.graphics().setDepth(1);
+  const alpha = opts.dim ? 0.6 : 1;
+  g.fillStyle(0xffe9a8, 0.06 * alpha);
+  g.fillCircle(210, 170, 260);
+  g.fillStyle(0xffe9a8, 0.045 * alpha);
+  g.fillCircle(210, 170, 380);
+  const colors = [0xfff3c4, 0xf7ce6b, 0xe9f2e6];
+  const n = opts.motes ?? 7;
+  for (let i = 0; i < n; i++) {
+    const x = 120 + (i * 233) % 1600;
+    const y = 200 + ((i * 127) % 500);
+    const dot = scene.add.circle(x, y, 2.5 + (i % 3), colors[i % 3] ?? 0xfff3c4, 0.55 * alpha).setDepth(1);
+    scene.tweens.add({
+      targets: dot,
+      y: y - 38 - (i % 4) * 12,
+      alpha: { from: 0.22, to: 0.6 },
+      duration: 3600 + (i % 5) * 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 }
 

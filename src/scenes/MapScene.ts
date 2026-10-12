@@ -3,7 +3,7 @@ import { readSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
 import { ALL_LEVELS, levelById } from '../data/levels/index.ts';
 import { MAP_NODES, MAP_SEGMENTS, NODE_R, type MapNode } from '../data/map/meadow.ts';
-import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, breathe, KIT } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, drawAmbient, breathe, KIT } from '../ui/components/kit.ts';
 import { openDeckPicker } from '../ui/DeckPicker.ts';
 import { typography, hexToInt } from '../ui/tokens.ts';
 
@@ -23,6 +23,7 @@ export class MapScene extends Phaser.Scene {
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     const { width } = this.scale.gameSize;
     drawPixelBackdrop(this);
+    drawAmbient(this, { motes: 5 });
     sceneHeader(this, '巡野图 · 晨雾草原', { subtitle: `VERDANT MAP · 已通关 ${this.clearedCount()}/${ALL_LEVELS.length} 量产关` });
     this.drawSegments();
     this.drawPaths();

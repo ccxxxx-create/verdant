@@ -7,7 +7,7 @@ import { codexTerrainRules, codexCounters } from '../data/codex/terrain.ts';
 import type { UnitArchetype, EnemyArchetype } from '../core/schema/unit.ts';
 import { palette, worldPalette, typography, radius, motion, spacing, withAlpha, hexToInt } from '../ui/tokens.ts';
 import { CARD_W, CARD_H, createUnitCard, createEnemyCard, ARMOR_LABEL, ARMOR_COLOR, ROLE_LABEL, ROLE_COLOR } from '../ui/components/cards.ts';
-import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, KIT } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, drawAmbient, KIT } from '../ui/components/kit.ts';
 
 type TabId = 'units' | 'enemies' | 'worlds' | 'terrain';
 
@@ -64,6 +64,7 @@ export class CodexScene extends Phaser.Scene {
   create(): void {
     const { width } = this.scale.gameSize;
     drawPixelBackdrop(this);
+    drawAmbient(this, { motes: 4, dim: true });
     sceneHeader(this, '图鉴', { subtitle: 'VERDANT CODEX · 收录 51 生灵 / 44 怪兽' });
     this.drawTabs(width);
     this.renderTab(width);
