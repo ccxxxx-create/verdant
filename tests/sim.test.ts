@@ -73,7 +73,8 @@ function tryPlant(state: BattleState): boolean {
   if (producers.length < 6) {
     const pid = SIM_DECK.find((id) => state.config.units.get(id)?.role === 'producer' && affordable(id));
     if (pid) {
-      const cell = freeCell(0) ?? freeCell(1);
+      // 生产者钉 col1 起，col0 留给"最后防线"攻击植物：子弹向右，越过 col2 防线的敌人只有 col0/col1 植物够得着（藤蟒啃 col0 生产者致死循环事故，2026-10-12 节奏对齐后暴露）
+      const cell = freeCell(1) ?? freeCell(0);
       if (cell && cmdPlant(state, pid, cell.row, cell.col)) return true;
     }
   }
@@ -82,7 +83,7 @@ function tryPlant(state: BattleState): boolean {
     return !!d?.attack && affordable(id);
   });
   if (aid) {
-    for (const col of [3, 2, 4, 5, 1, 0]) {
+    for (const col of [0, 3, 2, 4, 5, 1]) {
       const cell = freeCell(col);
       if (cell && cmdPlant(state, aid, cell.row, cell.col)) return true;
     }
@@ -117,8 +118,8 @@ describe('M3A battle kernel: wave pacing (PvZ1 口径)', () => {
     expect(waveBudget(lv, lv.waves)).toBeGreaterThan(waveBudget(lv, 1) * 2);
   });
 
-  it('firstWaveDelayMs：teach=12s（M3A 重锚值）', () => {
-    expect(firstWaveDelayMs(lv)).toBe(12000);
+  it('firstWaveDelayMs：全关卡 18s（PvZ1 GameConstants.h 权威口径）', () => {
+    expect(firstWaveDelayMs(lv)).toBe(18000);
   });
 });
 
@@ -233,7 +234,7 @@ describe('M3A battle kernel: determinism & headless sweep', () => {
 
   it('findCollectableDrop 只匹配已落地露珠', () => {
     const state = battle('meadow-1-1');
-    for (let i = 0; i < 110; i++) step(state, SIM_DT_MS); // 首滴 4.5s 天降 + 落地 → 必有露珠
+    for (let i = 0; i < 110; i++) step(state, SIM_DT_MS); // 首滴 4.25s 天降 → 必有露珠
     const anyDrop = state.drops[0];
     expect(anyDrop).toBeTruthy();
     if (!anyDrop) return;

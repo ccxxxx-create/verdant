@@ -3,7 +3,7 @@
  * PvZ1 对齐口径来自原版反编译实测（docs/_review/research-notes.md 待誊清）：
  * - 啃食：DAMAGE_PER_EAT=4，每 4 tick 一口 @100Hz 鈫?100 dps 鈫?300 血植物 3s、木芯 4000=40s
  * - 波点：points = wave/3 + 1；大波 脳2.5 并强灌普通僵尸；清场加速（剩 鈮?55% 血 鈫?计时压 2s）
- * - 天空阳光 4.25~7s（本仓有意放宽为 7~11s，见 GDD 楼8.2 放宽记录）
+ * - 天空阳光 4.25s + rand(0~2.75s)，上限 7s（原 firstS 4.5 + 7~11s 偏慢，2026-10-12 用户试玩裁定废止）
  * 图鉴静态页 docs/almanac.html 与本文件同源：改完运行 node scripts/gen-almanac.mjs。
  */
 
@@ -19,10 +19,10 @@ export const SHIELD_HP = 250;
 
 /** 波次节奏（秒）。key 覆盖全部 LevelDef.template，未覆盖走 default。 */
 export const WAVE_PACING = {
-  /** 首波延迟。 */
-  firstWave: { teach: 12, normal: 10, flag: 8, survive: 8, boss: 8, chal: 10, conveyor: 6, default: 10 } as Record<string, number>,
-  /** 常规波间隔基数（+ rand(0, range)）。 */
-  betweenWaves: { base: 18, range: 4 },
+  /** 首波延迟（PvZ1 GameConstants.h:39-44 权威口径：全关卡 18s）。 */
+  firstWave: { teach: 18, normal: 18, flag: 18, survive: 18, boss: 18, chal: 18, conveyor: 18, default: 18 } as Record<string, number>,
+  /** 常规波间隔基数（+ rand(0, range)；PvZ1：25s + rand(0~6s)）。 */
+  betweenWaves: { base: 25, range: 6 },
   /** 波内出怪间隔。 */
   spawnInterval: { teach: 2.0, normal: 1.6, flag: 1.5, survive: 1.6, boss: 1.6, chal: 1.6, conveyor: 1.6, default: 1.6 } as Record<string, number>,
   /** 波次预算公式 base鈥?(1+w鈥硋rowth)鈥硋scale鈥硋inalMult 的系数。 */
@@ -40,11 +40,11 @@ export const WAVE_PACING = {
   warningS: 7.5,
 } as const;
 
-/** 天空露珠（PvZ1 公开常识：约 10s 一滴；本仓 7~11s 为有意放宽）。 */
+/** 天空露珠（PvZ1 GameConstants.h:46-48 权威口径：4.25s + rand(0~2.75s)，均值≈5.6s，上限 7s）。 */
 export const SKY_SUN = {
-  firstS: 4.5,
-  intervalMinS: 7,
-  intervalMaxS: 11,
+  firstS: 4.25,
+  intervalMinS: 4.25,
+  intervalMaxS: 7,
   value: 25,
   /** 落地停留 s（超 3s 时进入闪烁倒计时）。 */
   restS: 14,
