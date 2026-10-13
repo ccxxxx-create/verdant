@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { enemyPoints } from './unit';
 
 /**
- * 存档 schema v4（M2 经济：金币/钻石/种子券/能量豆 + 抽奖计数）。
+ * 存档 schema v5（M-UI：新增 settings.motion 减弱动态开关；v4 = M2 经济）。
  * 纪律：字段只增不删；未知 key 由 migrate 末端 shapeCurrent 剥离（不整档拒绝）。
  */
-export const SaveV4 = z.strictObject({
-  schemaVersion: z.literal(4),
+export const SaveV5 = z.strictObject({
+  schemaVersion: z.literal(5),
   updatedAt: z.string(),
   progress: z.strictObject({
     clearedLevels: z.array(z.string()),
@@ -33,6 +33,8 @@ export const SaveV4 = z.strictObject({
     quality: z.enum(['auto', 'high', 'medium', 'low']),
     speedDefault: z.union([z.literal(1), z.literal(2)]),
     handLayout: z.enum(['left', 'right']),
+    /** 减弱动态（可访问性）：关闭常驻循环动效与氛围粒子。 */
+    motion: z.boolean(),
   }),
   stats: z.strictObject({
     playSeconds: z.number().int().nonnegative(),
@@ -41,12 +43,12 @@ export const SaveV4 = z.strictObject({
   }),
 });
 
-export type SaveGame = z.infer<typeof SaveV4>;
-export const CURRENT_SCHEMA_VERSION = 4;
+export type SaveGame = z.infer<typeof SaveV5>;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 export function defaultSave(): SaveGame {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     updatedAt: new Date(0).toISOString(),
     progress: {
       clearedLevels: [],
@@ -56,7 +58,7 @@ export function defaultSave(): SaveGame {
     },
     wallet: { coins: 0, diamonds: 0, seeds: 0, plantFood: 0 },
     gacha: { singlePulls: 0, diamondTenPulls: 0 },
-    settings: { master: 0.8, music: 0.6, sfx: 1, quality: 'auto', speedDefault: 1, handLayout: 'right' },
+    settings: { master: 0.8, music: 0.6, sfx: 1, quality: 'auto', speedDefault: 1, handLayout: 'right', motion: true },
     stats: { playSeconds: 0, wins: 0, losses: 0 },
   };
 }
@@ -112,7 +114,16 @@ function toV4(v3: Unknown): Unknown {
   };
 }
 
-const MIGRATIONS: Record<number, (v: Unknown) => Unknown> = { 1: toV2, 2: toV3, 3: toV4 };
+/** v4→v5：新增 settings.motion（减弱动态开关；旧档默认开启动效）。 */
+function toV5(v4: Unknown): Unknown {
+  return {
+    ...v4,
+    schemaVersion: 5,
+    settings: { ...((v4['settings'] as Unknown) ?? {}), motion: true },
+  };
+}
+
+const MIGRATIONS: Record<number, (v: Unknown) => Unknown> = { 1: toV2, 2: toV3, 3: toV4, 4: toV5 };
 
 function num(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -164,6 +175,7 @@ function shapeCurrent(v: Unknown): Unknown {
       quality: QUALITIES.includes(String(s['quality'])) ? s['quality'] : 'auto', // 白名单透传
       speedDefault: s['speedDefault'] === 2 ? 2 : 1,
       handLayout: s['handLayout'] === 'left' ? 'left' : 'right',
+      motion: typeof s['motion'] === 'boolean' ? s['motion'] : true,
     },
     stats: {
       playSeconds: nonNeg(st['playSeconds']),

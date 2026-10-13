@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readSave, writeSave, type SaveStorage } from '../src/core/save';
-import { SaveV4, defaultSave, migrate, CURRENT_SCHEMA_VERSION } from '../src/core/schema/save';
+import { SaveV5, defaultSave, migrate, CURRENT_SCHEMA_VERSION } from '../src/core/schema/save';
 
 function memoryStore(initial?: string): SaveStorage & { data: Record<string, string> } {
   const data: Record<string, string> = {};
@@ -20,6 +20,7 @@ describe('save default & roundtrip', () => {
     expect(save.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(save.progress.unlockedUnits).toContain('firefly_reed');
     expect(save.settings.handLayout).toBe('right');
+    expect(save.settings.motion).toBe(true); // v5：减弱动态默认开
     // M2 钱包默认值
     expect(save.wallet).toEqual({ coins: 0, diamonds: 0, seeds: 0, plantFood: 0 });
     expect(save.gacha).toEqual({ singlePulls: 0, diamondTenPulls: 0 });
@@ -46,7 +47,7 @@ describe('migration chain', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
       progress: { clearedLevels: ['meadow-1-1'], stars: { 'meadow-1-1': 3 }, unlockedUnits: ['firefly_reed'] },
     };
-    const result = SaveV4.parse(migrate(v1));
+    const result = SaveV5.parse(migrate(v1));
     expect(result.progress.currentWorld).toBe('meadow');
     expect(result.settings.quality).toBe('auto');
     expect(result.settings.handLayout).toBe('right');
@@ -61,7 +62,7 @@ describe('migration chain', () => {
       progress: { clearedLevels: [], stars: {}, unlockedUnits: [], currentWorld: 'meadow' },
       settings: { master: 1, music: 0.5, sfx: 0.8, speedDefault: 2 },
     };
-    const result = SaveV4.parse(migrate(v2));
+    const result = SaveV5.parse(migrate(v2));
     expect(result.settings.speedDefault).toBe(2);
     expect(result.settings.handLayout).toBe('right');
   });
@@ -75,9 +76,24 @@ describe('migration chain', () => {
       settings: { master: 0.7, music: 0.5, sfx: 1, quality: 'auto', speedDefault: 1, handLayout: 'right' },
       stats: { playSeconds: 10, wins: 1, losses: 0 },
     };
-    const result = SaveV4.parse(migrate(v3));
+    const result = SaveV5.parse(migrate(v3));
     expect(result.wallet).toEqual({ coins: 320, diamonds: 2, seeds: 0, plantFood: 0 });
     expect(result.gacha).toEqual({ singlePulls: 0, diamondTenPulls: 0 });
+  });
+
+  it('v4 migrates to v5 adding settings.motion=true', () => {
+    const v4 = {
+      schemaVersion: 4,
+      updatedAt: '2026-10-01T00:00:00.000Z',
+      progress: { clearedLevels: [], stars: {}, unlockedUnits: [], currentWorld: 'meadow' },
+      wallet: { coins: 1, diamonds: 0, seeds: 0, plantFood: 0 },
+      gacha: { singlePulls: 0, diamondTenPulls: 0 },
+      settings: { master: 0.8, music: 0.6, sfx: 1, quality: 'auto', speedDefault: 1, handLayout: 'right' },
+      stats: { playSeconds: 0, wins: 0, losses: 0 },
+    };
+    const result = SaveV5.parse(migrate(v4));
+    expect(result.settings.motion).toBe(true);
+    expect(result.wallet.coins).toBe(1);
   });
 
   it('future version is rejected, not silently downgraded', () => {

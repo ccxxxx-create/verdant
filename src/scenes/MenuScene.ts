@@ -1,17 +1,17 @@
 import Phaser from 'phaser';
-import { palette, worldPalette, typography, radius, motion, hexToInt } from '../ui/tokens.ts';
+import { palette, typography, motion, FONT } from '../ui/tokens.ts';
 import { readSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
 import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
 import { ensurePixelTextures } from './BattleScene.ts';
-import { drawPixelBackdrop, pixelPanel, sceneEnter, breathe, pressable, KIT } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelPanel, sceneEnter, breathe, pressable, KIT, MOTION_ENABLED } from '../ui/components/kit.ts';
+import { modal, type ModalHandle } from '../ui/components/overlay.ts';
+import { setMotionPreference } from '../ui/settings.ts';
 import { ALL_LEVELS } from '../data/levels/index.ts';
 
 /** 总单位数（图鉴完成度分母；分母取 GDD 首发 51）。 */
 const TOTAL_UNITS = 51;
-
-const FONT = 'system-ui, "PingFang SC", sans-serif';
 
 /**
  * 主界面 Hub（W7-1b 重排：商业游戏主界面范式）：
@@ -22,6 +22,7 @@ const FONT = 'system-ui, "PingFang SC", sans-serif';
 export class MenuScene extends Phaser.Scene {
   private hint?: Phaser.GameObjects.Text;
   private hintTimer?: Phaser.Time.TimerEvent;
+  private settingsModal?: ModalHandle;
   private save?: SaveGame;
 
   constructor() {
@@ -34,6 +35,8 @@ export class MenuScene extends Phaser.Scene {
     this.hint = undefined;
     this.hintTimer?.remove();
     this.hintTimer = undefined;
+    this.settingsModal?.destroy();
+    this.settingsModal = undefined;
 
     for (const [name, sprite] of Object.entries(pixelIcons)) bakePixelTexture(this, `icon_${name}`, sprite, 4);
     ensurePixelTextures(this);
@@ -54,20 +57,21 @@ export class MenuScene extends Phaser.Scene {
     const g = this.add.graphics().setDepth(1);
     const halo = [0.1, 0.07, 0.045];
     halo.forEach((a, i) => {
-      g.fillStyle(0xffe9a8, a);
+      g.fillStyle(KIT.sunGlow, a);
       g.fillCircle(230, 190, 190 + i * 110);
     });
-    g.fillStyle(0xfff3c4, 0.5);
+    g.fillStyle(KIT.sunCore, 0.5);
     g.fillCircle(230, 190, 64);
   }
 
   private drawFloatingMotes(): void {
-    const colors = [0xfff3c4, 0xf7ce6b, 0xe9f2e6];
+    if (!MOTION_ENABLED) return; // 减弱动态：不生成氛围粒子
+    const colors = [KIT.sunCore, KIT.moteWarm, KIT.moteCool];
     for (let i = 0; i < 12; i++) {
       const x = 140 + (i * 173) % 1500;
       const y = 220 + ((i * 97) % 520);
       const r = 3 + (i % 3) * 2;
-      const dot = this.add.circle(x, y, r, colors[i % 3] ?? 0xfff3c4, 0.75).setDepth(1);
+      const dot = this.add.circle(x, y, r, colors[i % 3] ?? KIT.sunCore, 0.75).setDepth(1);
       this.tweens.add({
         targets: dot,
         y: y - 46 - (i % 4) * 14,
@@ -85,53 +89,57 @@ export class MenuScene extends Phaser.Scene {
   private drawLogo(): void {
     const c = this.add.container(96, 66).setDepth(3);
     // 投影层
-    c.add(this.add.text(4, 6, '长 夏', { fontFamily: FONT, fontSize: '104px', fontStyle: 'bold', color: '#1E3A2E' }).setOrigin(0, 0.5).setAlpha(0.35));
+    c.add(this.add.text(4, 6, '长 夏', { fontFamily: FONT, fontSize: '104px', fontStyle: 'bold', color: KIT.shadowCss }).setOrigin(0, 0.5).setAlpha(0.35));
     // 主字（金 + 深描边）
     c.add(
       this.add
-        .text(0, 0, '长 夏', { fontFamily: FONT, fontSize: '104px', fontStyle: 'bold', color: '#F2C14E' })
+        .text(0, 0, '长 夏', { fontFamily: FONT, fontSize: '104px', fontStyle: 'bold', color: KIT.accentCss })
         .setOrigin(0, 0.5)
-        .setStroke('#26402F', 10),
+        .setStroke(KIT.outlineCss, 10),
     );
     c.add(
       this.add
-        .text(8, 78, 'VERDANT · 晨雾草原', { fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color: '#26402F' })
+        .text(8, 78, 'VERDANT · 晨雾草原', { ...typography.subheading, color: KIT.outlineCss })
         .setOrigin(0, 0.5)
         .setAlpha(0.85),
     );
-    this.tweens.add({ targets: c, y: 70, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    if (MOTION_ENABLED) this.tweens.add({ targets: c, y: 70, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 
   // —— 主角立绘（右侧视觉锚点） ——
   private drawHero(): void {
     const cx = 1500;
     const cy = 640;
-    const shadow = this.add.ellipse(cx, cy + 196, 360, 56, 0x1e3a2e, 0.28).setDepth(2);
+    const shadow = this.add.ellipse(cx, cy + 196, 360, 56, KIT.shadow, 0.28).setDepth(2);
     void shadow;
     const hero = this.add.image(cx, cy, 'unit_firefly_reed').setScale(3.4).setDepth(3);
-    this.tweens.add({
-      targets: hero,
-      y: cy - 12,
-      scaleY: 3.4 * 1.015,
-      duration: 2400,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
+    if (MOTION_ENABLED) {
+      this.tweens.add({
+        targets: hero,
+        y: cy - 12,
+        scaleY: 3.4 * 1.015,
+        duration: 2400,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
     // 伴生小单位（层次感）
     const side = this.add.image(cx - 220, cy + 130, 'unit_thorn_pea').setScale(1.9).setDepth(3);
-    this.tweens.add({
-      targets: side,
-      scaleY: 1.9 * 1.03,
-      duration: 1900,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-      delay: 400,
-    });
+    if (MOTION_ENABLED) {
+      this.tweens.add({
+        targets: side,
+        scaleY: 1.9 * 1.03,
+        duration: 1900,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        delay: 400,
+      });
+    }
     // 底座草簇
     const g = this.add.graphics().setDepth(2);
-    g.fillStyle(0x4e7e5c, 1);
+    g.fillStyle(KIT.grassDeep, 1);
     for (let i = 0; i < 7; i++) {
       const gx = cx - 190 + i * 64;
       g.fillTriangle(gx, cy + 190, gx + 12, cy + 156, gx + 24, cy + 190);
@@ -155,21 +163,21 @@ export class MenuScene extends Phaser.Scene {
     const g = this.add.graphics();
     g.fillStyle(KIT.shadow, 0.4);
     g.fillRoundedRect(0, 7, w, h, 8);
-    g.fillStyle(0x6fbf83, 1);
+    g.fillStyle(KIT.success, 1);
     g.fillRoundedRect(0, 0, w, h, 8);
-    g.fillStyle(0x8fd4a0, 1);
+    g.fillStyle(KIT.successLight, 1);
     g.fillRoundedRect(0, 0, w, 14, 8);
     g.lineStyle(4, KIT.outline, 1);
     g.strokeRoundedRect(0, 0, w, h, 8);
     c.add(g);
     c.add(
       this.add
-        .text(w / 2, 42, label, { fontFamily: FONT, fontSize: '38px', fontStyle: 'bold', color: '#FFFFFF' })
+        .text(w / 2, 42, label, { ...typography.title, color: KIT.onAccent })
         .setOrigin(0.5)
-        .setStroke('#26402F', 7),
+        .setStroke(KIT.outlineCss, 7),
     );
-    c.add(this.add.text(w / 2, 92, sub, { fontFamily: FONT, fontSize: '15px', color: '#E9F5EC' }).setOrigin(0.5));
-    this.tweens.add({ targets: c, scale: { from: 1, to: 1.015 }, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    c.add(this.add.text(w / 2, 92, sub, { ...typography.caption, color: KIT.onAccentSoft }).setOrigin(0.5));
+    if (MOTION_ENABLED) this.tweens.add({ targets: c, scale: { from: 1, to: 1.015 }, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     const hit = this.add.zone(x, y, w, h).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
     pressable(this, hit, c, true);
     hit.on('pointerup', () => this.scene.start('Map'));
@@ -180,16 +188,16 @@ export class MenuScene extends Phaser.Scene {
     const progress = Math.min(1, cleared / Math.max(1, ALL_LEVELS.length));
     pb.fillStyle(KIT.outline, 0.18);
     pb.fillRoundedRect(x, y + h + 12, bw, 10, 5);
-    pb.fillStyle(0xd9a53a, 1);
+    pb.fillStyle(KIT.goldMid, 1);
     pb.fillRoundedRect(x, y + h + 12, Math.max(10, bw * progress), 10, 5);
   }
 
   // —— 次级功能小卡（CTA 下方三卡） ——
   private drawSecondaryRow(): void {
     const modes: { label: string; icon: string; color: number; action: 'codex' | 'shop' | 'draw' }[] = [
-      { label: '图鉴', icon: 'book', color: 0xd9a53a, action: 'codex' },
-      { label: '商店', icon: 'coin', color: 0x6fa8c9, action: 'shop' },
-      { label: '抽奖', icon: 'seed', color: 0x9b8cd9, action: 'draw' },
+      { label: '图鉴', icon: 'book', color: KIT.goldMid, action: 'codex' },
+      { label: '商店', icon: 'coin', color: KIT.accentBlue, action: 'shop' },
+      { label: '抽奖', icon: 'seed', color: KIT.diamond, action: 'draw' },
     ];
     const cw = 148;
     const ch = 148;
@@ -199,7 +207,7 @@ export class MenuScene extends Phaser.Scene {
       const x = 120 + i * (cw + gap);
       const card = pixelPanel(this, x, y, cw, ch, { depth: 3, stroke: m.color });
       card.add(this.add.image(cw / 2, 52, `icon_${m.icon}`).setDisplaySize(56, 56));
-      card.add(this.add.text(cw / 2, 112, m.label, { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: KIT.textDark }).setOrigin(0.5));
+      card.add(this.add.text(cw / 2, 112, m.label, { ...typography.heading, color: KIT.textDark }).setOrigin(0.5));
       const hit = this.add.zone(x, y, cw, ch).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
       pressable(this, hit, card, true);
       hit.on('pointerup', () => {
@@ -222,10 +230,10 @@ export class MenuScene extends Phaser.Scene {
     const cy = y + 32;
     let cx = x + 30;
     this.add.image(cx, cy, 'icon_trophy').setDisplaySize(26, 26).setDepth(4);
-    this.add.text(cx + 20, cy, `${stars}`, { fontFamily: FONT, fontSize: '18px', fontStyle: 'bold', color: '#B8860B' }).setOrigin(0, 0.5).setDepth(4);
+    this.add.text(cx + 20, cy, `${stars}`, { ...typography.body, fontStyle: 'bold', color: KIT.goldDeepCss }).setOrigin(0, 0.5).setDepth(4);
     cx += 96;
     this.add.image(cx, cy, 'icon_book').setDisplaySize(24, 24).setDepth(4);
-    this.add.text(cx + 20, cy, `${unlocked}/${TOTAL_UNITS}`, { fontFamily: FONT, fontSize: '17px', color: KIT.textDark }).setOrigin(0, 0.5).setDepth(4);
+    this.add.text(cx + 20, cy, `${unlocked}/${TOTAL_UNITS}`, { ...typography.body, color: KIT.textDark }).setOrigin(0, 0.5).setDepth(4);
     cx += 118;
     const wallet: [string, string][] = [
       ['icon_coin', 'coins'],
@@ -236,7 +244,7 @@ export class MenuScene extends Phaser.Scene {
     wallet.forEach(([icon, key]) => {
       this.add.image(cx, cy, icon).setDisplaySize(26, 26).setDepth(4);
       this.add
-        .text(cx + 20, cy, `${save?.wallet[key as keyof typeof save.wallet] ?? 0}`, { fontFamily: FONT, fontSize: '17px', fontStyle: 'bold', color: KIT.textDark })
+        .text(cx + 20, cy, `${save?.wallet[key as keyof typeof save.wallet] ?? 0}`, { ...typography.body, fontStyle: 'bold', color: KIT.textDark })
         .setOrigin(0, 0.5)
         .setDepth(4);
       cx += 104;
@@ -245,8 +253,8 @@ export class MenuScene extends Phaser.Scene {
 
   // —— 右下角工具钮（设置/音效/关于） ——
   private drawCornerButtons(width: number, height: number): void {
-    const items: { icon: string; msg: string }[] = [
-      { icon: 'settings', msg: '设置场景（音量/画质/触控布局）在 M2 开放' },
+    const items: { icon: string; msg: string; action?: 'settings' }[] = [
+      { icon: 'settings', msg: '设置', action: 'settings' },
       { icon: 'sound', msg: 'WebAudio 程序化音效在 M6 落地' },
       { icon: 'info', msg: 'Verdant《长夏》· 文档见 docs/GDD.md' },
     ];
@@ -260,8 +268,46 @@ export class MenuScene extends Phaser.Scene {
       panel.add(this.add.image(size / 2, size / 2, `icon_${it.icon}`).setDisplaySize(30, 30));
       const hit = this.add.zone(x, y, size, size).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
       pressable(this, hit, panel, true);
-      hit.on('pointerup', () => this.showHint(x + size / 2, y - 24, it.msg));
+      hit.on('pointerup', () => {
+        if (it.action === 'settings') this.openSettings();
+        else this.showHint(x + size / 2, y - 24, it.msg);
+      });
     });
+  }
+
+  /** 设置弹层（当前承载"减弱动态"可访问性开关）。 */
+  private openSettings(): void {
+    const save = this.save;
+    if (!save) return;
+    const rebuild = (): void => {
+      this.settingsModal?.destroy();
+      this.settingsModal = modal(this, {
+        title: '设置',
+        subtitle: '长夏 · 表现与可访问性',
+        width: 600,
+        height: 320,
+        buttons: [
+          {
+            label: `减弱动态：${save.settings.motion ? '开' : '关'}`,
+            sub: '关闭后不再播放常驻循环动效与氛围粒子',
+            onClick: () => {
+              setMotionPreference(save, !save.settings.motion);
+              // 立即生效：重启主界面，让常驻循环动效按新开关重建（审查 P1-2）
+              this.tweens.killAll();
+              this.scene.restart();
+            },
+          },
+          {
+            label: '关闭',
+            onClick: () => {
+              this.settingsModal?.destroy();
+              this.settingsModal = undefined;
+            },
+          },
+        ],
+      });
+    };
+    rebuild();
   }
 
   private showHint(x: number, y: number, msg: string): void {

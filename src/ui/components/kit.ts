@@ -1,38 +1,77 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../../data/pixels/palette.ts';
-import { typography, hexToInt } from '../tokens.ts';
+import { typography, hexToInt, motion, FONT, semantic } from '../tokens.ts';
 
 /**
- * Hub/浅色场景统一组件库（M3B 界面统一 pass）：
+ * Hub/浅色场景统一组件库（M3B 界面统一 pass → M-UI 设计系统升级）：
  * 与 Battle 场景同一像素语言（PAPER 纸底 + OUTLINE 描边 + 实色偏移投影，无模糊阴影）。
- * 场景只允许经本文件取背景/面板/按钮/钱包条/场景头，禁止散落圆角白卡（形状一致性锁）。
+ * 场景只允许经本文件取背景/面板/按钮/钱包条/场景头/标签/进度条，禁止散落圆角白卡与 hex（形状/色一致性锁）。
  */
 
 const P = PALETTE as Record<string, string>;
 export const KIT = {
   paper: parseInt((P.g ?? '#F5E9C8').replace('#', ''), 16), // 纸底
   paperDeep: parseInt((P.B ?? '#FFF0C2').replace('#', ''), 16),
+  paperCss: P.g ?? '#F5E9C8',
+  creamCss: P.B ?? '#FFF0C2',
   outline: parseInt((P.K ?? '#26402F').replace('#', ''), 16), // 描边
   outlineCss: P.K ?? '#26402F',
   wood: parseInt((P.N ?? '#9C6B3C').replace('#', ''), 16),
   woodLight: parseInt((P.n ?? '#C89A5E').replace('#', ''), 16),
   shadow: 0x1e3a2e, // 实色投影（相对纸底压暗，非纯黑）
+  shadowCss: '#1E3A2E',
   skyTop: 0xa9d7ef,
   skyMid: 0xc8e8f4,
   skyLow: 0xe4f2ef,
   cloud: 0xffffff,
+  cloudShade: 0xdceef5,
   grassLit: 0x8fc07a,
   grass: 0x6fa86b,
   grassDeep: 0x4e7e5c,
   hill: 0xb7d6bd,
-  textDark: '#26402F',
+  gold: hexToInt(P.G ?? '#FFD34D'),
+  goldCss: P.G ?? '#FFD34D',
+  white: hexToInt(P.W ?? '#FFFFFF'),
+  diamond: hexToInt(P.P ?? '#9B7BF0'),
+  diamondCss: P.P ?? '#9B7BF0',
+  onAccent: P.W ?? '#FFFFFF',
+  textDark: P.K ?? '#26402F',
   textSub: '#5E7A66',
+  textBrown: P.e ?? '#8A5F3C',
+  // 氛围（晨光光晕 / 飘浮光露）
+  sunGlow: 0xffe9a8,
+  sunCore: 0xfff3c4,
+  moteWarm: 0xf7ce6b,
+  moteCool: 0xe9f2e6,
+  // 强调与阶梯金/蓝（Hub 层）
+  accent: hexToInt(semantic.accent),
+  accentCss: semantic.accent,
+  goldMid: 0xd9a53a,
+  goldDeep: 0xb8860b,
+  goldDeepCss: '#B8860B',
+  accentBlue: 0x6fa8c9,
+  successLight: 0x8fd4a0,
+  onAccentSoft: '#E9F5EC',
+  success: hexToInt(semantic.success),
+  successCss: semantic.success,
+  warning: hexToInt(semantic.warning),
+  warningCss: semantic.warning,
+  danger: hexToInt(semantic.danger),
+  dangerCss: semantic.danger,
+  info: hexToInt(semantic.info),
+  infoCss: semantic.info,
 } as const;
 
-/** 全局动效开关（M6 设置场景"减弱动态"接入点）。 */
-export const MOTION_ENABLED = true;
+/**
+ * 全局动效开关（"减弱动态"设置接入点，对应存档 settings.motion）。
+ * 以 let 导出：ES 模块 live binding，调用方 import 后始终读到最新值。
+ */
+export let MOTION_ENABLED = true;
 
-const FONT = 'system-ui, "PingFang SC", sans-serif';
+/** 设置动效开关（由 ui/settings.ts 在载档与切换时调用）。 */
+export function setMotionEnabled(enabled: boolean): void {
+  MOTION_ENABLED = enabled;
+}
 
 /** 像素场景感背景：带状天空 + 像素云 + 远山 + 双层草地锯齿缘 + 稀疏点阵。 */
 export function drawPixelBackdrop(scene: Phaser.Scene): void {
@@ -58,7 +97,7 @@ export function drawPixelBackdrop(scene: Phaser.Scene): void {
     g.fillRect(cx - 44 * s, cy - 10 * s, 88 * s, 20 * s);
     g.fillRect(cx - 22 * s, cy - 24 * s, 48 * s, 18 * s);
     g.fillRect(cx + 10 * s, cy - 18 * s, 34 * s, 14 * s);
-    g.fillStyle(0xdceef5, 0.9);
+    g.fillStyle(KIT.cloudShade, 0.9);
     g.fillRect(cx - 44 * s, cy + 6 * s, 88 * s, 4 * s);
   };
   // 云只放在两侧天空可见带（避开全宽顶栏与中央内容区）
@@ -111,9 +150,11 @@ export function pixelPanel(
 export interface PixelButtonResult {
   container: Phaser.GameObjects.Container;
   hit: Phaser.GameObjects.Zone;
+  /** 主标签文本（供调用方动态改字，如"暂停/继续""1× / 2×"）。 */
+  labelText: Phaser.GameObjects.Text;
 }
 
-/** 像素按钮：木底/accent 底 + 描边 + 按压反馈；命中区场景级（容器交互陷阱防线）。 */
+/** 像素按钮：木底/accent 底 + 描边 + 按压/悬停反馈；命中区场景级（容器交互陷阱防线）。 */
 export function pixelButton(
   scene: Phaser.Scene,
   x: number,
@@ -139,28 +180,37 @@ export function pixelButton(
   g.lineStyle(3, KIT.outline, enabled ? 1 : 0.6);
   g.strokeRoundedRect(0, 0, w, h, 6);
   c.add(g);
-  c.add(
-    scene.add
-      .text(w / 2, opts.sub ? h / 2 - 16 : h / 2, label, { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: KIT.textDark })
-      .setOrigin(0.5),
-  );
+  // 悬停高光（仅启用态；压在文字下方，故在 label 之前 add）
+  const hoverFx = scene.add.graphics();
+  hoverFx.fillStyle(0xffffff, 0.16);
+  hoverFx.fillRoundedRect(0, 0, w, h, 6);
+  hoverFx.setAlpha(0);
+  c.add(hoverFx);
+  const labelText = scene.add
+    .text(w / 2, opts.sub ? h / 2 - 16 : h / 2, label, { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: KIT.textDark })
+    .setOrigin(0.5);
+  c.add(labelText);
   if (opts.sub) {
     c.add(scene.add.text(w / 2, h / 2 + 22, opts.sub, { fontFamily: FONT, fontSize: '14px', color: KIT.textDark }).setOrigin(0.5).setAlpha(0.75));
   }
   const hit = scene.add.zone(x, y, w, h).setOrigin(0, 0).setDepth((opts.depth ?? 3) + 1).setInteractive({ useHandCursor: enabled });
   pressable(scene, hit, c, enabled);
+  if (enabled && MOTION_ENABLED) {
+    hit.on('pointerover', () => scene.tweens.add({ targets: hoverFx, alpha: 1, duration: motion.feedback }));
+    hit.on('pointerout', () => scene.tweens.add({ targets: hoverFx, alpha: 0, duration: motion.feedback + 40 }));
+  }
   if (enabled && opts.onClick) hit.on('pointerup', opts.onClick);
-  return { container: c, hit };
+  return { container: c, hit, labelText };
 }
 
 /** 按压反馈（game-feel-design：点击即响应，0.97 缩放 + 回弹；hit 与视觉件分离时绑 hit）。 */
 export function pressable(scene: Phaser.Scene, hit: Phaser.GameObjects.Zone, target: Phaser.GameObjects.Container, enabled = true): void {
   if (!MOTION_ENABLED || !enabled) return;
   hit.on('pointerdown', () => {
-    scene.tweens.add({ targets: target, scale: 0.97, duration: 60, ease: 'Quad.easeOut' });
+    scene.tweens.add({ targets: target, scale: 0.97, duration: motion.press, ease: 'Quad.easeOut' });
   });
   const up = (): void => {
-    scene.tweens.add({ targets: target, scale: 1, duration: 90, ease: 'Back.easeOut' });
+    scene.tweens.add({ targets: target, scale: 1, duration: motion.press, ease: 'Back.easeOut' });
   };
   hit.on('pointerup', up);
   hit.on('pointerout', up);
@@ -175,7 +225,69 @@ export function breathe(scene: Phaser.Scene, target: Phaser.GameObjects.Containe
 /** 场景进入：纸色淡入（全部场景统一 240ms，避免生硬切换）。 */
 export function sceneEnter(scene: Phaser.Scene): void {
   if (!MOTION_ENABLED) return;
-  scene.cameras.main.fadeIn(240, 244, 241, 234);
+  scene.cameras.main.fadeIn(motion.transition, 244, 241, 234);
+}
+
+/** 胶囊标签（职能/护甲/渠道等）：实色底 + 白字，供卡片与 HUD 复用。 */
+export function chip(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  label: string,
+  opts: { color?: number; width?: number; height?: number; textColor?: string; depth?: number } = {},
+): Phaser.GameObjects.Container {
+  const w = opts.width ?? 64;
+  const h = opts.height ?? 26;
+  const c = scene.add.container(x, y).setDepth(opts.depth ?? 0);
+  const g = scene.add.graphics();
+  g.fillStyle(opts.color ?? KIT.woodLight, 1);
+  g.fillRoundedRect(0, 0, w, h, 4);
+  g.lineStyle(2, KIT.outline, 0.45);
+  g.strokeRoundedRect(0, 0, w, h, 4);
+  c.add(g);
+  c.add(
+    scene.add
+      .text(w / 2, h / 2, label, { fontFamily: FONT, fontSize: '14px', fontStyle: 'bold', color: opts.textColor ?? KIT.onAccent })
+      .setOrigin(0.5),
+  );
+  return c;
+}
+
+/** 在既有 Graphics 上重绘进度条（clear 后绘制，可每波刷新，避免每帧新建对象）。 */
+export function paintProgressBar(
+  g: Phaser.GameObjects.Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  ratio: number,
+  opts: { fill?: number; track?: number } = {},
+): void {
+  const r = Math.max(0, Math.min(1, ratio));
+  g.clear();
+  g.fillStyle(opts.track ?? KIT.outline, 0.18);
+  g.fillRoundedRect(x, y, w, h, h / 2);
+  if (r > 0) {
+    g.fillStyle(opts.fill ?? KIT.gold, 1);
+    g.fillRoundedRect(x, y, Math.max(h, w * r), h, h / 2);
+  }
+  g.lineStyle(2, KIT.outline, 0.55);
+  g.strokeRoundedRect(x, y, w, h, h / 2);
+}
+
+/** 进度条（波次/关卡进度）：底槽 + 填充 + 描边，统一像素语言。 */
+export function progressBar(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  ratio: number,
+  opts: { fill?: number; track?: number; depth?: number } = {},
+): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics().setDepth(opts.depth ?? 0);
+  paintProgressBar(g, x, y, w, h, ratio, opts);
+  return g;
 }
 
 /** 统一钱包条：四资产 icon + 数量（三场景同构，PAPER 面板承载）。 */
@@ -230,14 +342,14 @@ export function sceneHeader(
   const tx = 236;
   const ty = 80;
   scene.add
-    .text(tx + 3, ty + 4, title, { fontFamily: FONT, fontSize: '34px', fontStyle: 'bold', color: '#1E3A2E' })
+    .text(tx + 3, ty + 4, title, { fontFamily: FONT, fontSize: '34px', fontStyle: 'bold', color: KIT.shadowCss })
     .setOrigin(0, 0.5)
     .setAlpha(0.28)
     .setDepth(depth);
   scene.add
     .text(tx, ty, title, { fontFamily: FONT, fontSize: '34px', fontStyle: 'bold', color: KIT.textDark })
     .setOrigin(0, 0.5)
-    .setStroke('#F5E9C8', 6)
+    .setStroke(KIT.paperCss, 6)
     .setDepth(depth);
   if (opts.subtitle) {
     scene.add
@@ -254,12 +366,12 @@ export function sceneHeader(
 export function drawAmbient(scene: Phaser.Scene, opts: { motes?: number; dim?: boolean } = {}): void {
   const g = scene.add.graphics().setDepth(1);
   const alpha = opts.dim ? 0.6 : 1;
-  g.fillStyle(0xffe9a8, 0.06 * alpha);
+  g.fillStyle(KIT.sunGlow, 0.06 * alpha);
   g.fillCircle(210, 170, 260);
-  g.fillStyle(0xffe9a8, 0.045 * alpha);
+  g.fillStyle(KIT.sunGlow, 0.045 * alpha);
   g.fillCircle(210, 170, 380);
-  const colors = [0xfff3c4, 0xf7ce6b, 0xe9f2e6];
-  const n = opts.motes ?? 7;
+  const colors = [KIT.sunCore, KIT.moteWarm, KIT.moteCool];
+  const n = MOTION_ENABLED ? opts.motes ?? 7 : 0; // 减弱动态：不生成飘浮粒子
   for (let i = 0; i < n; i++) {
     const x = 120 + (i * 233) % 1600;
     const y = 200 + ((i * 127) % 500);

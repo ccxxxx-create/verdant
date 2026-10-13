@@ -5,7 +5,7 @@ import { ALL_LEVELS, levelById } from '../data/levels/index.ts';
 import { MAP_NODES, MAP_SEGMENTS, NODE_R, type MapNode } from '../data/map/meadow.ts';
 import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, drawAmbient, breathe, KIT } from '../ui/components/kit.ts';
 import { openDeckPicker } from '../ui/DeckPicker.ts';
-import { typography, hexToInt } from '../ui/tokens.ts';
+import { typography } from '../ui/tokens.ts';
 
 /**
  * 巡野图场景（W7-1）：草原 32 关节点长卷（DEV-PLAN §1.1 的 MapScene 落地）。
@@ -42,7 +42,7 @@ export class MapScene extends Phaser.Scene {
       const panel = pixelPanel(this, seg.x - 110, 232, 220, 56, { depth: 2, radius: 4 });
       void panel;
       this.add
-        .text(seg.x, 260, `${seg.name}`, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '24px', fontStyle: 'bold', color: KIT.textDark })
+        .text(seg.x, 260, `${seg.name}`, { ...typography.heading, color: KIT.textDark })
         .setOrigin(0.5)
         .setDepth(3);
     }
@@ -96,7 +96,7 @@ export class MapScene extends Phaser.Scene {
     const size = NODE_R * 2;
     const produced = state !== 'locked' || !!level;
 
-    const stroke = state === 'cleared' ? 0xd9a53a : state === 'open' ? hexToInt('#6FA86B') : KIT.outline;
+    const stroke = state === 'cleared' ? KIT.goldMid : state === 'open' ? KIT.success : KIT.outline;
     const panel = pixelPanel(this, x - NODE_R, node.y - NODE_R, size, size, {
       depth: 3,
       stroke,
@@ -107,9 +107,7 @@ export class MapScene extends Phaser.Scene {
 
     this.add
       .text(x, node.y - 6, node.label, {
-        fontFamily: 'system-ui, "PingFang SC", sans-serif',
-        fontSize: '19px',
-        fontStyle: 'bold',
+        ...typography.subheading,
         color: state === 'locked' ? KIT.textSub : KIT.textDark,
       })
       .setOrigin(0.5)
@@ -119,17 +117,15 @@ export class MapScene extends Phaser.Scene {
       const stars = this.save?.progress.stars[node.id] ?? 0;
       this.add
         .text(x, node.y + 20, stars > 0 ? '★'.repeat(stars) : '已通关', {
-          fontFamily: 'system-ui, "PingFang SC", sans-serif',
-          fontSize: '13px',
-          color: '#B8860B',
+          ...typography.caption,
+          color: KIT.goldDeepCss,
         })
         .setOrigin(0.5)
         .setDepth(4);
     } else if (state === 'locked') {
       this.add
         .text(x, node.y + 20, produced ? '未解锁' : '量产中', {
-          fontFamily: 'system-ui, "PingFang SC", sans-serif',
-          fontSize: '12px',
+          ...typography.caption,
           color: KIT.textSub,
         })
         .setOrigin(0.5)

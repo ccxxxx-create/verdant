@@ -5,9 +5,9 @@ import { ensurePixelTextures } from './BattleScene.ts';
 import { codexWorlds } from '../data/codex/worlds.ts';
 import { codexTerrainRules, codexCounters } from '../data/codex/terrain.ts';
 import type { UnitArchetype, EnemyArchetype } from '../core/schema/unit.ts';
-import { palette, worldPalette, typography, radius, motion, spacing, withAlpha, hexToInt } from '../ui/tokens.ts';
+import { palette, worldPalette, typography, radius, hexToInt, zIndex } from '../ui/tokens.ts';
 import { CARD_W, CARD_H, createUnitCard, createEnemyCard, ARMOR_LABEL, ARMOR_COLOR, ROLE_LABEL, ROLE_COLOR } from '../ui/components/cards.ts';
-import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, drawAmbient, KIT } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, drawAmbient, KIT, chip, MOTION_ENABLED } from '../ui/components/kit.ts';
 
 type TabId = 'units' | 'enemies' | 'worlds' | 'terrain';
 
@@ -52,6 +52,7 @@ export class CodexScene extends Phaser.Scene {
   private content?: Phaser.GameObjects.Container;
   private scrollMaskShape?: Phaser.GameObjects.Graphics;
   private tabChips: Phaser.GameObjects.Container[] = [];
+  private tabHits: Phaser.GameObjects.Zone[] = [];
 
   constructor() {
     super('Codex');
@@ -74,6 +75,8 @@ export class CodexScene extends Phaser.Scene {
 
   private drawTabs(width: number): void {
     for (const c of this.tabChips) c.destroy(true);
+    for (const h of this.tabHits) h.destroy();
+    this.tabHits = [];
     const ids: TabId[] = ['units', 'enemies', 'worlds', 'terrain'];
     const chipW = 240;
     const gap = 24;
@@ -90,24 +93,16 @@ export class CodexScene extends Phaser.Scene {
       g.lineStyle(3, KIT.outline, active ? 1 : 0.7);
       g.strokeRoundedRect(0, 0, chipW, 56, 6);
       chip.add(g);
-      chip.add(
-        this.add
-          .text(chipW / 2, 28, `${TAB_LABEL[id]} · ${TAB_COUNT[id]}`, {
-            fontFamily: 'system-ui, "PingFang SC", sans-serif',
-            fontSize: '18px',
-            fontStyle: 'bold',
-            color: KIT.textDark,
-          })
-          .setOrigin(0.5),
-      );
-      chip.setSize(chipW, 56);
-      chip.setInteractive({ useHandCursor: true });
-      chip.on('pointerup', () => {
+      chip.add(this.add.text(chipW / 2, 28, `${TAB_LABEL[id]} · ${TAB_COUNT[id]}`, { ...typography.subheading, color: KIT.textDark }).setOrigin(0.5));
+      // 命中区场景级（容器交互在 depth>0 不可靠）；随 tabHits 统一销毁
+      const hit = this.add.zone(x, 132, chipW, 56).setOrigin(0, 0).setDepth(zIndex.hud + 1).setInteractive({ useHandCursor: true });
+      hit.on('pointerup', () => {
         if (this.tab === id) return;
         this.tab = id;
         this.drawTabs(width);
         this.renderTab(width);
       });
+      this.tabHits.push(hit);
       return chip;
     });
   }
@@ -228,7 +223,7 @@ export class CodexScene extends Phaser.Scene {
       g.fillRoundedRect(0, 5, cardW, cardH, 6);
       g.fillStyle(KIT.paper, 0.97);
       g.fillRoundedRect(0, 0, cardW, cardH, 6);
-      g.lineStyle(3, Phaser.Display.Color.HexStringToColor(col2).color, 1);
+      g.lineStyle(3, hexToInt(col2), 1);
       g.strokeRoundedRect(0, 0, cardW, cardH, 6);
       card.add(g);
       card.add(this.add.image(88, 92, `world_${w.id}`).setDisplaySize(96, 96));
@@ -260,12 +255,12 @@ export class CodexScene extends Phaser.Scene {
       g.fillRoundedRect(0, 5, cardW, cardH, 6);
       g.fillStyle(KIT.paper, 0.97);
       g.fillRoundedRect(0, 0, cardW, cardH, 6);
-      g.lineStyle(3, Phaser.Display.Color.HexStringToColor(palette.primaryDeep).color, 1);
+      g.lineStyle(3, hexToInt(palette.primaryDeep), 1);
       g.strokeRoundedRect(0, 0, cardW, cardH, 6);
       card.add(g);
       card.add(
         this.add
-          .text(28, 24, `${r.name}（${r.element}）`, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '22px', fontStyle: 'bold', color: palette.primaryDeep }),
+          .text(28, 24, `${r.name}（${r.element}）`, { ...typography.subheading, color: palette.primaryDeep }),
       );
       card.add(this.add.text(28, 66, r.summary, { ...typography.body, color: palette.bgDeep }).setAlpha(0.9));
       card.add(this.add.text(28, 104, `触发：${r.trigger}`, { ...typography.caption, color: palette.bgDeep }).setAlpha(0.75));
@@ -305,8 +300,8 @@ export class CodexScene extends Phaser.Scene {
   // —— 详情弹层 ——
   private openOverlay(): { dim: Phaser.GameObjects.Rectangle; panel: Phaser.GameObjects.Container } {
     const { width, height } = this.scale.gameSize;
-    const dim = this.add.rectangle(0, 0, width, height, 0x23272b, 0.5).setOrigin(0, 0);
-    const panel = this.add.container(0, 0);
+    const dim = this.add.rectangle(0, 0, width, height, hexToInt(palette.bgDeep), 0.5).setOrigin(0, 0).setDepth(zIndex.overlay).setInteractive();
+    const panel = this.add.container(0, 0).setDepth(zIndex.dialog);
     const pg = this.add.graphics();
     const pw = 1180;
     const ph = 780;
@@ -319,21 +314,25 @@ export class CodexScene extends Phaser.Scene {
     pg.lineStyle(3, KIT.outline, 1);
     pg.strokeRoundedRect(px, py, pw, ph, 6);
     panel.add(pg);
-    // 关闭
-    const close = this.add.container(px + pw - 96, py + 24);
+    // 关闭按钮（视觉）
+    const closeBtn = this.add.container(px + pw - 96, py + 24);
     const cg = this.add.graphics();
     cg.fillStyle(hexToInt(palette.bgDeep), 0.1);
     cg.fillRoundedRect(0, 0, 64, 48, radius.md);
-    close.add(cg);
-    close.add(this.add.text(32, 24, '✕', { ...typography.heading, color: palette.bgDeep }).setOrigin(0.5));
-    close.setSize(64, 48);
-    close.setInteractive({ useHandCursor: true });
-    close.on('pointerup', () => {
+    closeBtn.add(cg);
+    closeBtn.add(this.add.text(32, 24, '✕', { ...typography.heading, color: palette.bgDeep }).setOrigin(0.5));
+    // 命中区场景级（容器交互在 depth>0 不可靠）
+    const closeHit = this.add.zone(px + pw - 96, py + 24, 64, 48).setOrigin(0, 0).setDepth(zIndex.dialog + 1).setInteractive({ useHandCursor: true });
+    // 统一关闭路径（✕ 与点遮罩共用；closeHit 为场景级，必须一并销毁防泄漏——审查 P1-1）
+    const close = (): void => {
       this.tweens.killAll(); // 详情立绘 idleBreathe repeat:-1 随弹层终止（P2-9 泄漏修复）
+      closeHit.destroy();
       dim.destroy();
       panel.destroy(true);
-    });
-    panel.add(close);
+    };
+    closeHit.on('pointerup', close);
+    dim.on('pointerup', close);
+    panel.add(closeBtn);
     return { dim, panel };
   }
 
@@ -350,17 +349,9 @@ export class CodexScene extends Phaser.Scene {
     this.idleBreathe(portrait);
 
     const rx = px + 420;
-    panel.add(this.add.text(rx, py + 56, u.name, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '40px', fontStyle: 'bold', color: palette.primaryDeep }));
-    // 职能胶囊
-    const chip = this.add.graphics();
-    chip.fillStyle(Phaser.Display.Color.HexStringToColor(ROLE_COLOR[u.role]).color, 1);
-    chip.fillRoundedRect(rx, py + 118, 80, 32, radius.sm);
-    panel.add(chip);
-    panel.add(
-      this.add
-        .text(rx + 40, py + 135, ROLE_LABEL[u.role], { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '16px', fontStyle: 'bold', color: '#FFFFFF' })
-        .setOrigin(0.5),
-    );
+    panel.add(this.add.text(rx, py + 56, u.name, { ...typography.title, color: palette.primaryDeep }));
+    // 职能胶囊（统一走 kit.chip）
+    panel.add(chip(this, rx, py + 118, ROLE_LABEL[u.role], { color: hexToInt(ROLE_COLOR[u.role]), width: 80, height: 32 }));
     panel.add(this.add.text(rx + 100, py + 135, `造价 ${u.cost} 光露`, { ...typography.body, color: palette.bgDeep }));
 
     // 特色介绍（wrap 手动换行）
@@ -396,12 +387,7 @@ export class CodexScene extends Phaser.Scene {
       panel.add(this.add.text(tx + 78, ty + 17, t, { ...typography.caption, color: palette.primaryDeep }).setOrigin(0.5));
     });
     panel.add(this.add.text(rx, py + 620, '克制关系见「地形」tab 的克制速查表（GDD §7.5）', { ...typography.caption, color: palette.bgDeep }).setAlpha(0.6));
-    dim.setInteractive();
-    dim.on('pointerup', () => {
-      this.tweens.killAll();
-      dim.destroy();
-      panel.destroy(true);
-    });
+    void dim; // 遮罩关闭已由 openOverlay 统一绑定
   }
 
   private showEnemyDetail(e: EnemyArchetype, width: number): void {
@@ -417,23 +403,9 @@ export class CodexScene extends Phaser.Scene {
     this.idleBreathe(portrait);
 
     const rx = px + 420;
-    panel.add(
-      this.add.text(rx, py + 56, e.isBoss ? `${e.name} · BOSS` : e.name, {
-        fontFamily: 'system-ui, "PingFang SC", sans-serif',
-        fontSize: '40px',
-        fontStyle: 'bold',
-        color: palette.primaryDeep,
-      }),
-    );
-    const chip = this.add.graphics();
-    chip.fillStyle(Phaser.Display.Color.HexStringToColor(ARMOR_COLOR[e.armor]).color, 1);
-    chip.fillRoundedRect(rx, py + 118, 96, 32, radius.sm);
-    panel.add(chip);
-    panel.add(
-      this.add
-        .text(rx + 48, py + 135, ARMOR_LABEL[e.armor], { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '16px', fontStyle: 'bold', color: '#FFFFFF' })
-        .setOrigin(0.5),
-    );
+    panel.add(this.add.text(rx, py + 56, e.isBoss ? `${e.name} · BOSS` : e.name, { ...typography.title, color: palette.primaryDeep }));
+    // 护甲胶囊（统一走 kit.chip）
+    panel.add(chip(this, rx, py + 118, ARMOR_LABEL[e.armor], { color: hexToInt(ARMOR_COLOR[e.armor]), width: 96, height: 32 }));
     panel.add(this.add.text(rx + 116, py + 135, e.isBoss ? '不计入波次预算' : `波次点数 ${e.points}`, { ...typography.body, color: palette.bgDeep }));
 
     panel.add(this.add.text(rx, py + 176, wrapText(e.flavor, 30), { ...typography.body, color: palette.bgDeep }).setAlpha(0.9));
@@ -447,11 +419,12 @@ export class CodexScene extends Phaser.Scene {
     rows.forEach((line, i) => {
       panel.add(this.add.text(rx, py + 232 + i * 40, line, { ...typography.body, color: palette.bgDeep }).setAlpha(0.85));
     });
-    dim.setInteractive();
+    void dim; // 遮罩关闭已由 openOverlay 统一绑定
   }
 
   /** 详情立绘待机微动（C7 的 PartAnimator 落地前的过渡实现）。 */
   private idleBreathe(target: Phaser.GameObjects.Image): void {
+    if (!MOTION_ENABLED) return; // 减弱动态：不播放常驻循环
     this.tweens.add({
       targets: target,
       scaleY: target.scaleY * 1.03,

@@ -5,7 +5,7 @@ import type { SaveGame } from '../core/schema/save.ts';
 import { registryFrom } from '../core/registry.ts';
 import { allUnits } from '../data/archetypes/index.ts';
 import { ensurePixelTextures } from '../scenes/BattleScene.ts';
-import { pixelPanel } from './components/kit.ts';
+import { pixelPanel, KIT } from './components/kit.ts';
 import { palette, worldPalette, typography, radius, hexToInt } from './tokens.ts';
 
 /**
@@ -43,7 +43,7 @@ export function openDeckPicker(scene: Phaser.Scene, level: LevelDef, save: SaveG
     return go;
   };
 
-  add(scene.add.rectangle(width / 2, 540, width, 1080, 0x26402f, 0.55).setDepth(50).setInteractive());
+  add(scene.add.rectangle(width / 2, 540, width, 1080, KIT.outline, 0.55).setDepth(50).setInteractive());
   const pw = 1080;
   const ph = 720; // 3 行卡 + 计数 + 按钮（防第三行与按钮重叠）
   const px = (width - pw) / 2;
@@ -51,7 +51,7 @@ export function openDeckPicker(scene: Phaser.Scene, level: LevelDef, save: SaveG
   add(pixelPanel(scene, px, py, pw, ph, { depth: 51, stroke: hexToInt(worldPalette.meadow) }));
   add(
     scene.add
-      .text(width / 2, py + 42, '选择出战卡组', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '30px', fontStyle: 'bold', color: palette.bgDeep })
+      .text(width / 2, py + 42, '选择出战卡组', { ...typography.title, color: palette.bgDeep })
       .setOrigin(0.5)
       .setDepth(52),
   );
@@ -85,7 +85,7 @@ export function openDeckPicker(scene: Phaser.Scene, level: LevelDef, save: SaveG
       if (!picked.includes(u.id)) return;
       const cx = startX + (i % cols) * (cw + gap);
       const cy = gridY + Math.floor(i / cols) * (ch + 14);
-      pickedFrame.lineStyle(4, 0xf2c14e, 1);
+      pickedFrame.lineStyle(4, hexToInt(palette.accent), 1);
       pickedFrame.strokeRoundedRect(cx - 2, cy - 2, cw + 4, ch + 4, 10);
     });
     countText.setText(`已选 ${picked.length} / ${DECK_CAP}`);
@@ -96,13 +96,13 @@ export function openDeckPicker(scene: Phaser.Scene, level: LevelDef, save: SaveG
     const cy = gridY + Math.floor(i / cols) * (ch + 14);
     const card = add(scene.add.container(cx, cy).setDepth(52));
     const g = scene.add.graphics();
-    g.fillStyle(0xffffff, 1);
+    g.fillStyle(KIT.white, 1);
     g.fillRoundedRect(0, 0, cw, ch, radius.md);
     g.lineStyle(2, hexToInt(palette.bgDeep), 0.25);
     g.strokeRoundedRect(0, 0, cw, ch, radius.md);
     card.add(g);
     card.add(scene.add.image(cw / 2, 56, `unit_${u.id}`).setScale(1.3));
-    card.add(scene.add.text(cw / 2, ch - 26, String(u.cost), { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '16px', fontStyle: 'bold', color: palette.bgDeep }).setOrigin(0.5));
+    card.add(scene.add.text(cw / 2, ch - 26, String(u.cost), { ...typography.body, fontStyle: 'bold', color: palette.bgDeep }).setOrigin(0.5));
     const hit = add(scene.add.zone(cx, cy, cw, ch).setOrigin(0, 0).setDepth(54).setInteractive({ useHandCursor: true }));
     hit.on('pointerup', () => {
       const idx = picked.indexOf(u.id);
@@ -124,11 +124,11 @@ export function openDeckPicker(scene: Phaser.Scene, level: LevelDef, save: SaveG
   const bx = width / 2 - bw / 2;
   const by = py + ph - 92;
   const btnG = add(scene.add.graphics().setDepth(52));
-  btnG.fillStyle(Phaser.Display.Color.HexStringToColor(palette.primary).color, 1);
+  btnG.fillStyle(hexToInt(palette.primary), 1);
   btnG.fillRoundedRect(bx, by, bw, 64, radius.md);
   add(
     scene.add
-      .text(width / 2, by + 32, '出 战', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '26px', fontStyle: 'bold', color: '#FFFFFF' })
+      .text(width / 2, by + 32, '出 战', { ...typography.heading, color: KIT.onAccent })
       .setOrigin(0.5)
       .setDepth(52),
   );
@@ -150,7 +150,7 @@ export function openDeckPicker(scene: Phaser.Scene, level: LevelDef, save: SaveG
   const cg = add(scene.add.graphics().setDepth(52));
   cg.fillStyle(hexToInt(palette.bgDeep), 0.12);
   cg.fillCircle(closeX, closeY, 22);
-  add(scene.add.text(closeX, closeY, '✕', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '24px', fontStyle: 'bold', color: palette.bgDeep }).setOrigin(0.5).setDepth(52));
+  add(scene.add.text(closeX, closeY, '✕', { ...typography.heading, color: palette.bgDeep }).setOrigin(0.5).setDepth(52));
   const closeHit = add(scene.add.zone(closeX - 24, closeY - 24, 48, 48).setOrigin(0, 0).setDepth(54).setInteractive({ useHandCursor: true }));
   closeHit.on('pointerup', () => close());
 

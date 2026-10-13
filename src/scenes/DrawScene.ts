@@ -6,6 +6,7 @@ import { Rng } from '../core/rng.ts';
 import { readSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
 import { drawPixelBackdrop, pixelPanel, pixelButton, walletBar, sceneHeader, sceneEnter, drawAmbient, KIT } from '../ui/components/kit.ts';
+import { typography } from '../ui/tokens.ts';
 
 const PRIZE_ICON: Record<GachaPrize['kind'], string> = {
   unit: 'icon_seed',
@@ -21,9 +22,10 @@ const PRIZE_LABEL: Record<GachaPrize['kind'], string> = {
   seeds: '种子',
   plantFood: '能量豆',
 };
+// 稀有度描边：唯一源 = KIT（角色=金卡 / 钻石=紫；其余沿用面板描边）
 const RARITY_TINT: Record<GachaPrize['kind'], number | null> = {
-  unit: 0xd9a53a, // 角色出货=金卡
-  diamonds: 0x8e6fd8,
+  unit: KIT.gold,
+  diamonds: KIT.diamond,
   coins: null,
   seeds: null,
   plantFood: null,
@@ -65,14 +67,10 @@ export class DrawScene extends Phaser.Scene {
     const mkBtn = (label: string, sub: string, x: number, enabled: boolean, accent: number, onClick: () => void): void => {
       pixelButton(this, x, 250, 380, 150, label, { sub, enabled, accent, depth: 3, onClick });
     };
-    mkBtn('单 抽', `消耗 1 种子券（现有 ${wallet?.seeds ?? 0}）`, width / 2 - 400, (wallet?.seeds ?? 0) >= GACHA_COST.singleSeed, 0x6fbf83, () => this.pullSingle());
-    mkBtn('十 连', `消耗 ${GACHA_COST.diamondTen} 钻石 · 必出未拥有角色`, width / 2 + 20, (wallet?.diamonds ?? 0) >= GACHA_COST.diamondTen, 0x9b8cd9, () => this.pullTen());
+    mkBtn('单 抽', `消耗 1 种子券（现有 ${wallet?.seeds ?? 0}）`, width / 2 - 400, (wallet?.seeds ?? 0) >= GACHA_COST.singleSeed, KIT.success, () => this.pullSingle());
+    mkBtn('十 连', `消耗 ${GACHA_COST.diamondTen} 钻石 · 必出未拥有角色`, width / 2 + 20, (wallet?.diamonds ?? 0) >= GACHA_COST.diamondTen, KIT.diamond, () => this.pullTen());
     this.add
-      .text(width / 2, 442, '概率：金币 40% · 种子 28% · 能量豆 15% · 钻石 9% · 角色 8%', {
-        fontFamily: 'system-ui, "PingFang SC", sans-serif',
-        fontSize: '14px',
-        color: KIT.textSub,
-      })
+      .text(width / 2, 442, '概率：金币 40% · 种子 28% · 能量豆 15% · 钻石 9% · 角色 8%', { ...typography.caption, color: KIT.textSub })
       .setOrigin(0.5)
       .setDepth(3);
   }
@@ -85,30 +83,17 @@ export class DrawScene extends Phaser.Scene {
       // 空状态：引导构图（icon + 主文案 + 进度），不再是纯空框
       const empty = this.add.container(width / 2, 700).setDepth(3);
       empty.add(this.add.image(0, -60, 'icon_seed').setScale(3).setAlpha(0.85));
-      empty.add(
-        this.add
-          .text(0, 20, '抽一次试试手气', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '24px', fontStyle: 'bold', color: KIT.textDark })
-          .setOrigin(0.5),
-      );
+      empty.add(this.add.text(0, 20, '抽一次试试手气', { ...typography.heading, color: KIT.textDark }).setOrigin(0.5));
       const owned = this.save?.progress.unlockedUnits.length ?? 0;
       empty.add(
         this.add
-          .text(0, 58, `已收集 ${owned} / ${allUnits.length} 角色 · 钻石十连必出未拥有`, {
-            fontFamily: 'system-ui, "PingFang SC", sans-serif',
-            fontSize: '15px',
-            color: KIT.textSub,
-          })
+          .text(0, 58, `已收集 ${owned} / ${allUnits.length} 角色 · 钻石十连必出未拥有`, { ...typography.body, color: KIT.textSub })
           .setOrigin(0.5),
       );
       return;
     }
     this.add
-      .text(width / 2, 516, this.lastPrizes.length > 1 ? '十连结果' : '单抽结果', {
-        fontFamily: 'system-ui, "PingFang SC", sans-serif',
-        fontSize: '22px',
-        fontStyle: 'bold',
-        color: KIT.textDark,
-      })
+      .text(width / 2, 516, this.lastPrizes.length > 1 ? '十连结果' : '单抽结果', { ...typography.subheading, color: KIT.textDark })
       .setOrigin(0.5)
       .setDepth(3);
     this.lastPrizes.forEach((p, i) => {
@@ -130,25 +115,18 @@ export class DrawScene extends Phaser.Scene {
       card.add(this.add.image(0, -14, PRIZE_ICON[p.kind]).setDisplaySize(52, 52));
       card.add(
         this.add
-          .text(0, 34, unitName ?? `${PRIZE_LABEL[p.kind]} ×${p.amount}`, {
-            fontFamily: 'system-ui, "PingFang SC", sans-serif',
-            fontSize: '15px',
-            fontStyle: 'bold',
-            color: KIT.textDark,
-          })
+          .text(0, 34, unitName ?? `${PRIZE_LABEL[p.kind]} ×${p.amount}`, { ...typography.caption, fontStyle: 'bold', color: KIT.textDark })
           .setOrigin(0.5),
       );
       // 翻入动效：scaleX 0→1 逐张 stagger（game-feel-design：结果揭示是反馈高潮）
-      if (this.lastPrizes.length > 0) {
-        card.setScale(0, 1);
-        this.tweens.add({
-          targets: card,
-          scaleX: 1,
-          duration: 220,
-          delay: 120 + i * 90,
-          ease: 'Back.easeOut',
-        });
-      }
+      card.setScale(0, 1);
+      this.tweens.add({
+        targets: card,
+        scaleX: 1,
+        duration: 220,
+        delay: 120 + i * 90,
+        ease: 'Back.easeOut',
+      });
     });
   }
 

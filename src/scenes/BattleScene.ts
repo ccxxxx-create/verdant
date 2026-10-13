@@ -15,7 +15,16 @@ import { unitSprites } from '../data/pixels/units/meadow.ts';
 import { enemySprites, projectileSprites } from '../data/pixels/enemies/meadow.ts';
 import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
-import { typography } from '../ui/tokens.ts';
+import { typography, FONT, zIndex } from '../ui/tokens.ts';
+import { KIT, pixelButton, paintProgressBar } from '../ui/components/kit.ts';
+import {
+  woodBand,
+  resourceBadge,
+  seedCardBase,
+  costBadge,
+  drawWaveProgress as paintWaveBar,
+} from '../ui/components/hud.ts';
+import { modal, settlement, type ModalHandle } from '../ui/components/overlay.ts';
 import {
   createBattle,
   step,
@@ -47,16 +56,13 @@ const CARD_H = 128;
 const CARD_GAP = 14;
 const CARD_X0 = GRID_X0;
 
-const FONT = 'system-ui, "PingFang SC", sans-serif';
-const C_GOLD = '#FFD34D';
-const C_CREAM = '#FFF0C2';
-const C_DARK = '#26402F';
-const WOOD = parseInt((PALETTE.N ?? '#9C6B3C').replace('#', ''), 16);
-const WOOD_LIGHT = parseInt((PALETTE.n ?? '#C89A5E').replace('#', ''), 16);
-const PAPER = parseInt((PALETTE.g ?? '#F5E9C8').replace('#', ''), 16);
-const OUTLINE = parseInt((PALETTE.K ?? '#26402F').replace('#', ''), 16);
-const GOLD_INT = parseInt((PALETTE.G ?? '#FFD34D').replace('#', ''), 16);
-const CREAM_INT = parseInt((PALETTE.B ?? '#FFF0C2').replace('#', ''), 16);
+// 战斗局部色别名：唯一源 = KIT（禁止再写字面量；保留短名以缩小改造面、避免大范围替换引入回归）
+const C_GOLD = KIT.goldCss;
+const C_CREAM = KIT.creamCss;
+const C_DARK = KIT.outlineCss;
+const WOOD_LIGHT = KIT.woodLight;
+const OUTLINE = KIT.outline;
+const GOLD_INT = KIT.gold;
 
 interface CardRef {
   def: UnitArchetype;
@@ -127,7 +133,10 @@ export class BattleScene extends Phaser.Scene {
   private speedText?: Phaser.GameObjects.Text;
   private foodText?: Phaser.GameObjects.Text;
   private waveBar?: Phaser.GameObjects.Graphics;
-  private pauseParts: Phaser.GameObjects.GameObject[] = [];
+  private hudWaveBar?: Phaser.GameObjects.Graphics;
+  private lastWaveShown = -1;
+  private pauseModal?: ModalHandle;
+  private settleModal?: ModalHandle;
   private pauseBtnText?: Phaser.GameObjects.Text;
   private waveFlag?: Phaser.GameObjects.Image;
 
@@ -199,8 +208,11 @@ export class BattleScene extends Phaser.Scene {
     this.cards = [];
     this.banner?.destroy();
     this.banner = undefined;
-    for (const go of this.pauseParts) go.destroy();
-    this.pauseParts = [];
+    this.pauseModal?.destroy();
+    this.pauseModal = undefined;
+    this.settleModal?.destroy();
+    this.settleModal = undefined;
+    this.lastWaveShown = -1;
     this.ghost?.destroy();
     this.ghost = undefined;
     this.cellHighlight?.destroy();
@@ -254,90 +266,68 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawHud(): void {
-    const g = this.add.graphics().setDepth(10);
-    g.fillStyle(WOOD, 0.92);
-    g.fillRect(0, 0, 1920, 108);
+    woodBand(this, 0, 108);
+    const g = this.add.graphics().setDepth(zIndex.hud);
     g.lineStyle(3, WOOD_LIGHT, 1);
     g.lineBetween(0, 106, 1920, 106);
 
-    this.add.image(56, 54, 'icon_lightdew').setScale(3).setDepth(11);
-    this.sunText = this.add
-      .text(100, 54, String(this.bt.lightdew), { fontFamily: FONT, fontSize: '40px', fontStyle: 'bold', color: C_GOLD })
-      .setOrigin(0, 0.5)
-      .setDepth(11);
+    // 左：光露资源徽记（图标 + 大数字）
+    const badge = resourceBadge(this, 56, 54, 'icon_lightdew', String(this.bt.lightdew), { depth: zIndex.hud + 1 });
+    this.sunText = badge.valueText;
 
+    // 中：波次文本 + 细进度条
     this.waveText = this.add
-      .text(960, 54, `第 ${this.bt.wave} / ${this.level.waves} 波`, { ...typography.heading, fontSize: '26px', color: C_CREAM })
+      .text(960, 38, `第 ${this.bt.wave} / ${this.level.waves} 波`, { ...typography.heading, color: C_CREAM })
       .setOrigin(0.5)
-      .setDepth(11);
+      .setDepth(zIndex.hud + 1);
+    this.hudWaveBar = this.add.graphics().setDepth(zIndex.hud + 1);
+    paintProgressBar(this.hudWaveBar, 830, 76, 260, 12, this.waveRatio(), { fill: KIT.gold });
 
-    this.speedText = this.add
-      .text(1760, 54, `${this.speed}× 速度`, { ...typography.heading, fontSize: '22px', color: C_GOLD })
-      .setOrigin(1, 0.5)
-      .setDepth(11)
-      .setInteractive({ useHandCursor: true });
-    this.speedText.on('pointerup', () => { if (this.bt.status === 'playing' && !this.paused) this.toggleSpeed(); });
-
-    // 暂停/回主菜单入口（审查 P1-1：对局内必须可退出）
-    this.pauseBtnText = this.add
-      .text(1660, 54, '⏸ 暂停', { ...typography.heading, fontSize: '22px', color: C_CREAM })
-      .setOrigin(1, 0.5)
-      .setDepth(11)
-      .setInteractive({ useHandCursor: true });
-    this.pauseBtnText.on('pointerup', () => this.togglePause());
+    // 右：暂停 / 速度（统一走 kit.pixelButton，含悬停/按压反馈）
+    this.pauseBtnText = pixelButton(this, 1540, 26, 160, 56, '⏸ 暂停', {
+      depth: zIndex.hud + 1,
+      onClick: () => this.togglePause(),
+    }).labelText;
+    this.speedText = pixelButton(this, 1710, 26, 170, 56, `${this.speed}× 速度`, {
+      accent: KIT.gold,
+      depth: zIndex.hud + 1,
+      onClick: () => {
+        if (this.bt.status === 'playing' && !this.paused) this.toggleSpeed();
+      },
+    }).labelText;
 
     this.add
       .text(1880, 100, '空格加速 · 右键/铲子挖除 · 能量豆点单位或空地 · ESC 取消', { ...typography.caption, color: C_CREAM })
       .setOrigin(1, 1)
-      .setDepth(11)
+      .setDepth(zIndex.hud + 1)
       .setAlpha(0.8);
   }
 
-  /** 暂停：停止 update 并弹"继续/回主菜单"层（交互件全部场景级，勿放容器）。 */
+  /** 暂停：停止 update 并弹"继续/回主菜单"层（统一走 overlay.modal，交互件全场景级）。 */
   private togglePause(): void {
     if (this.bt.status !== 'playing') return;
     this.paused = !this.paused;
-    if (this.pauseBtnText) this.pauseBtnText.setText(this.paused ? '▶ 继续' : '⏸ 暂停');
+    this.pauseBtnText?.setText(this.paused ? '▶ 继续' : '⏸ 暂停');
     if (!this.paused) {
-      for (const go of this.pauseParts) go.destroy();
-      this.pauseParts = [];
+      this.pauseModal?.destroy();
+      this.pauseModal = undefined;
       return;
     }
-    const dim = this.add.rectangle(960, 540, 1920, 1080, 0x26402f, 0.55).setDepth(30).setInteractive();
-    this.pauseParts.push(dim);
-    const panel = this.add.graphics().setDepth(31);
-    panel.fillStyle(PAPER, 0.98);
-    panel.fillRoundedRect(710, 400, 500, 280, 16);
-    panel.lineStyle(3, OUTLINE, 1);
-    panel.strokeRoundedRect(710, 400, 500, 280, 16);
-    this.pauseParts.push(panel);
-    const mkBtn = (label: string, y: number, onClick: () => void): void => {
-      const g = this.add.graphics().setDepth(32);
-      g.fillStyle(WOOD_LIGHT, 1);
-      g.fillRoundedRect(770, y, 380, 64, 10);
-      this.pauseParts.push(g);
-      const t = this.add
-        .text(960, y + 32, label, { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: C_DARK })
-        .setOrigin(0.5)
-        .setDepth(32);
-      this.pauseParts.push(t);
-      const hit = this.add.zone(770, y, 380, 64).setOrigin(0, 0).setDepth(33).setInteractive({ useHandCursor: true });
-      hit.on('pointerup', onClick);
-      this.pauseParts.push(hit);
-    };
-    this.pauseParts.push(this.add.text(960, 450, '已暂停', { fontFamily: FONT, fontSize: '36px', fontStyle: 'bold', color: C_DARK }).setOrigin(0.5).setDepth(32));
-    mkBtn('继续布防', 500, () => this.togglePause());
-    mkBtn('回主菜单', 590, () => this.scene.start('Menu'));
+    this.pauseModal = modal(this, {
+      title: '已暂停',
+      subtitle: `${this.level.id} · ${this.level.waves} 波`,
+      width: 520,
+      height: 320,
+      buttons: [
+        { label: '继续布防', onClick: () => this.togglePause() },
+        { label: '回主菜单', onClick: () => this.scene.start('Menu') },
+      ],
+    });
   }
 
   /** 种子条：普通关=牌组卡；传送带关=手牌区（syncConveyorHand 同步）+ 工具卡。 */
   private drawSeedBar(): void {
-    const g = this.add.graphics().setDepth(10);
-    g.fillStyle(WOOD, 0.85);
-    g.fillRect(0, SEED_BAR_Y, 1920, SEED_BAR_H);
-    g.lineStyle(3, WOOD_LIGHT, 0.9);
-    g.lineBetween(0, SEED_BAR_Y, 1920, SEED_BAR_Y);
-    g.lineBetween(0, SEED_BAR_Y + SEED_BAR_H, 1920, SEED_BAR_Y + SEED_BAR_H);
+    woodBand(this, SEED_BAR_Y, SEED_BAR_H, { alpha: 0.85 });
 
     this.selFrame = this.add.graphics().setDepth(12);
     this.shovelFrame = this.add.graphics().setDepth(12);
@@ -362,22 +352,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private mkCard(x: number, def: UnitArchetype, opts: { hand?: boolean; showCost?: boolean } = {}): CardRef {
-    const card = this.add.container(x, this.CARD_Y).setDepth(11);
-    const bgG = this.add.graphics();
-    bgG.fillStyle(PAPER, 0.96);
-    bgG.fillRoundedRect(0, 0, CARD_W, CARD_H, 8);
-    bgG.lineStyle(2, OUTLINE, 1);
-    bgG.strokeRoundedRect(0, 0, CARD_W, CARD_H, 8);
-    card.add(bgG);
+    const card = seedCardBase(this, x, this.CARD_Y, CARD_W, CARD_H, { depth: 11 });
     const img = this.add.image(CARD_W / 2, opts.showCost === false ? CARD_H / 2 : 52, `unit_${def.id}`).setScale(opts.showCost === false ? 2.1 : 1.7);
     card.add(img);
     let costText: Phaser.GameObjects.Text | undefined;
     if (opts.showCost !== false) {
-      card.add(this.add.image(22, CARD_H - 18, 'icon_lightdew').setScale(1.1));
-      costText = this.add
-        .text(38, CARD_H - 18, String(def.cost), { fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: C_DARK })
-        .setOrigin(0, 0.5);
-      card.add(costText);
+      const badge = costBadge(this, 22, CARD_H - 18, def.cost);
+      card.add(badge.container);
+      costText = badge.text;
     }
     const mask = this.add.graphics();
     card.add(mask);
@@ -400,13 +382,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private mkToolCard(x: number, icon: string, label: string, onClick: () => void): void {
-    const card = this.add.container(x, this.CARD_Y).setDepth(11);
-    const sg = this.add.graphics();
-    sg.fillStyle(PAPER, 0.9);
-    sg.fillRoundedRect(0, 0, CARD_W, CARD_H, 8);
-    sg.lineStyle(2, OUTLINE, 1);
-    sg.strokeRoundedRect(0, 0, CARD_W, CARD_H, 8);
-    card.add(sg);
+    const card = seedCardBase(this, x, this.CARD_Y, CARD_W, CARD_H, { depth: 11 });
     card.add(this.add.image(CARD_W / 2, CARD_H / 2 - 10, icon).setScale(3));
     card.add(this.add.text(CARD_W / 2, CARD_H - 22, label, { ...typography.body, color: C_DARK }).setOrigin(0.5));
     this.cardParts.push(card);
@@ -453,13 +429,7 @@ export class BattleScene extends Phaser.Scene {
 
   private drawFoodCard(x: number): void {
     this.foodCardX = x;
-    const card = this.add.container(x, this.CARD_Y).setDepth(11);
-    const g = this.add.graphics();
-    g.fillStyle(PAPER, 0.9);
-    g.fillRoundedRect(0, 0, CARD_W, CARD_H, 8);
-    g.lineStyle(2, OUTLINE, 1);
-    g.strokeRoundedRect(0, 0, CARD_W, CARD_H, 8);
-    card.add(g);
+    const card = seedCardBase(this, x, this.CARD_Y, CARD_W, CARD_H, { depth: 11 });
     card.add(this.add.image(CARD_W / 2, CARD_H / 2 - 14, 'icon_energy').setScale(3));
     this.foodText = this.add
       .text(CARD_W / 2, CARD_H - 22, `×${this.bt.plantFood}`, { ...typography.body, color: C_DARK })
@@ -506,23 +476,16 @@ export class BattleScene extends Phaser.Scene {
     this.redrawWaveBar();
   }
 
+  /** 波次进度（0~1）：HUD 细进度条与右侧长条共用。 */
+  private waveRatio(): number {
+    return this.level.waves > 0 ? Math.min(1, this.bt.wave / this.level.waves) : 0;
+  }
+
   private redrawWaveBar(): void {
     if (!this.waveBar) return;
-    const x = 1858;
-    const y0 = 330;
-    const y1 = 1020;
-    const ratio = this.level.waves > 0 ? this.bt.wave / this.level.waves : 0;
-    this.waveBar.clear();
-    this.waveBar.fillStyle(OUTLINE, 0.28);
-    this.waveBar.fillRoundedRect(x, y0, 20, y1 - y0, 6);
-    this.waveBar.lineStyle(2, CREAM_INT, 0.85);
-    this.waveBar.strokeRoundedRect(x, y0, 20, y1 - y0, 6);
-    if (ratio > 0) {
-      const h = Math.max(8, (y1 - y0) * ratio);
-      this.waveBar.fillStyle(GOLD_INT, 1);
-      this.waveBar.fillRoundedRect(x, y1 - h, 20, h, 6);
-    }
-    this.waveFlag?.setY(Math.max(y0 + 24, y1 - (y1 - y0) * ratio));
+    const y = paintWaveBar(this.waveBar, 1858, 330, 1020, this.waveRatio());
+    this.waveFlag?.setY(y);
+    if (this.hudWaveBar) paintProgressBar(this.hudWaveBar, 830, 76, 260, 12, this.waveRatio(), { fill: KIT.gold });
   }
 
   // —— 选择态 UI ——
@@ -611,8 +574,11 @@ export class BattleScene extends Phaser.Scene {
     this.syncConveyorHand();
     this.updateCards();
     this.sunText?.setText(String(this.bt.lightdew));
-    this.waveText?.setText(`第 ${this.bt.wave} / ${this.level.waves} 波`);
-    this.redrawWaveBar();
+    if (this.lastWaveShown !== this.bt.wave) {
+      this.lastWaveShown = this.bt.wave;
+      this.waveText?.setText(`第 ${this.bt.wave} / ${this.level.waves} 波`);
+      this.redrawWaveBar();
+    }
   }
 
   // —— 事件 → 打击感（M2 件套逐块移植） ——
@@ -1018,8 +984,15 @@ export class BattleScene extends Phaser.Scene {
   // —— 结算（写档沿用 M2 经济；win/lose 事件驱动） ——
   private winLevel(): void {
     this.persistProgress(3);
-    this.bannerText('胜利！晨雾草原守住了', 2);
-    this.time.delayedCall(2400 / this.speed, () => this.scene.start('Menu'));
+    this.cameras.main.flash(260, 250, 244, 190);
+    this.settleModal?.destroy();
+    this.settleModal = settlement(this, {
+      win: true,
+      title: '胜利！晨雾草原守住了',
+      stars: 3,
+      lines: ['光露与奖励已入账', `${this.level.id} · ${this.level.waves} 波`],
+      onContinue: () => this.scene.start('Map'),
+    });
   }
 
   /** 败北写档：stats.losses（审查 P2-7）。 */
@@ -1065,7 +1038,12 @@ export class BattleScene extends Phaser.Scene {
     this.persistLoss();
     this.cameras.main.shake(420, 0.012);
     this.cameras.main.flash(300, 120, 20, 20);
-    this.bannerText('防线失守…', 2);
-    this.time.delayedCall(2400 / this.speed, () => this.scene.start('Menu'));
+    this.settleModal?.destroy();
+    this.settleModal = settlement(this, {
+      win: false,
+      title: '防线失守…',
+      lines: ['调整编成与种植顺序，再来一次', `${this.level.id} · ${this.level.waves} 波`],
+      onContinue: () => this.scene.start('Map'),
+    });
   }
 }

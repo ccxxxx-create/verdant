@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 import type { UnitArchetype, EnemyArchetype } from '../../core/schema/unit.ts';
-import { palette, typography, radius, motion, hexToInt, TOUCH_TARGET_MIN } from '../tokens.ts';
-import { KIT } from './kit.ts';
+import { palette, typography, radius, motion, hexToInt, TOUCH_TARGET_MIN, FONT } from '../tokens.ts';
+import { PALETTE } from '../../data/pixels/palette.ts';
+import { KIT, chip } from './kit.ts';
+
+const P = PALETTE as Record<string, string>;
 
 /** 图鉴/编成共用的卡片底板（M3B 像素语言）：纸底+语义色描边+实色偏移投影。 */
 export function cardFrame(
@@ -15,7 +18,7 @@ export function cardFrame(
   g.fillRoundedRect(0, 5, w, h, 6);
   g.fillStyle(KIT.paper, 0.97);
   g.fillRoundedRect(0, 0, w, h, 6);
-  g.lineStyle(3, Phaser.Display.Color.HexStringToColor(color).color, 1);
+  g.lineStyle(3, hexToInt(color), 1);
   g.strokeRoundedRect(0, 0, w, h, 6);
   return g;
 }
@@ -44,9 +47,10 @@ export const ARMOR_LABEL: Record<EnemyArchetype['armor'], string> = {
   iron: '铁甲',
 };
 
+/** 护甲四分层色（源自像素调色板单一事实源，禁止再散落 hex）。 */
 export const ARMOR_COLOR: Record<EnemyArchetype['armor'], string> = {
-  cloth: '#8A8578',
-  hide: '#A9805A',
+  cloth: P.u ?? '#C9B8A0',
+  hide: P.e ?? '#8A5F3C',
   shell: palette.moss,
   iron: palette.primaryDeep,
 };
@@ -62,7 +66,7 @@ export function lightdewChip(
   c.add(scene.add.image(0, 0, 'icon_lightdew').setScale(0.34));
   c.add(
     scene.add
-      .text(16, 0, String(cost), { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '18px', fontStyle: 'bold', color: palette.bgDeep })
+      .text(16, 0, String(cost), { fontFamily: FONT, fontSize: '18px', fontStyle: 'bold', color: palette.bgDeep })
       .setOrigin(0, 0.5),
   );
   return c;
@@ -86,28 +90,15 @@ export function createUnitCard(
       .setOrigin(0.5),
   );
 
-  // 职能胶囊
+  // 职能胶囊（统一走 kit.chip）
   const chipW = 64;
-  const chip = scene.add.graphics();
-  chip.fillStyle(Phaser.Display.Color.HexStringToColor(ROLE_COLOR[unit.role]).color, 1);
-  chip.fillRoundedRect(CARD_W / 2 - chipW / 2, 196, chipW, 26, radius.sm);
-  card.add(chip);
-  card.add(
-    scene.add
-      .text(CARD_W / 2, 210, ROLE_LABEL[unit.role], {
-        fontFamily: 'system-ui, "PingFang SC", sans-serif',
-        fontSize: '14px',
-        fontStyle: 'bold',
-        color: '#FFFFFF',
-      })
-      .setOrigin(0.5),
-  );
+  card.add(chip(scene, CARD_W / 2 - chipW / 2, 196, ROLE_LABEL[unit.role], { color: hexToInt(ROLE_COLOR[unit.role]), width: chipW }));
 
   card.add(lightdewChip(scene, CARD_W / 2, 248, unit.cost));
 
   // 选中态（hover）
   const hover = scene.add.graphics();
-  hover.lineStyle(4, Phaser.Display.Color.HexStringToColor(palette.accent).color, 1);
+  hover.lineStyle(4, hexToInt(palette.accent), 1);
   hover.strokeRoundedRect(0, 0, CARD_W, CARD_H, 6);
   hover.setVisible(false);
   card.add(hover);
@@ -116,17 +107,23 @@ export function createUnitCard(
   card.add(hit);
   hit.setInteractive({ useHandCursor: true });
   let downOnCard = false;
+  let downX = 0;
+  let downY = 0;
   hit.on('pointerover', () => hover.setVisible(true));
   hit.on('pointerout', () => {
     hover.setVisible(false);
     downOnCard = false;
   });
-  hit.on('pointerdown', () => {
+  hit.on('pointerdown', (p: Phaser.Input.Pointer) => {
     downOnCard = true;
+    downX = p.x;
+    downY = p.y;
   });
-  hit.on('pointerup', () => {
+  hit.on('pointerup', (p: Phaser.Input.Pointer) => {
     if (!downOnCard) return;
     downOnCard = false;
+    // 拖拽超过阈值视为滚动而非点选（收敛图鉴滚动穿透误触）
+    if (Math.hypot(p.x - downX, p.y - downY) > 10) return;
     scene.tweens.add({ targets: card, scale: 1.03, duration: motion.feedback, yoyo: true });
     onSelect(unit);
   });
@@ -154,20 +151,7 @@ export function createEnemyCard(
   );
 
   const chipW = 72;
-  const chip = scene.add.graphics();
-  chip.fillStyle(Phaser.Display.Color.HexStringToColor(ARMOR_COLOR[enemy.armor]).color, 1);
-  chip.fillRoundedRect(CARD_W / 2 - chipW / 2, 196, chipW, 26, radius.sm);
-  card.add(chip);
-  card.add(
-    scene.add
-      .text(CARD_W / 2, 210, ARMOR_LABEL[enemy.armor], {
-        fontFamily: 'system-ui, "PingFang SC", sans-serif',
-        fontSize: '14px',
-        fontStyle: 'bold',
-        color: '#FFFFFF',
-      })
-      .setOrigin(0.5),
-  );
+  card.add(chip(scene, CARD_W / 2 - chipW / 2, 196, ARMOR_LABEL[enemy.armor], { color: hexToInt(ARMOR_COLOR[enemy.armor]), width: chipW }));
 
   // HP 短条
   const barW = 120;
@@ -175,7 +159,7 @@ export function createEnemyCard(
   bar.fillStyle(hexToInt(palette.bgDeep), 0.15);
   bar.fillRoundedRect(CARD_W / 2 - barW / 2, 232, barW, 10, radius.sm);
   const ratio = Math.min(1, enemy.hp / 600);
-  bar.fillStyle(Phaser.Display.Color.HexStringToColor(ARMOR_COLOR[enemy.armor]).color, 1);
+  bar.fillStyle(hexToInt(ARMOR_COLOR[enemy.armor]), 1);
   bar.fillRoundedRect(CARD_W / 2 - barW / 2, 232, Math.max(10, barW * ratio), 10, radius.sm);
   card.add(bar);
   card.add(
@@ -186,7 +170,7 @@ export function createEnemyCard(
   );
 
   const hover = scene.add.graphics();
-  hover.lineStyle(4, Phaser.Display.Color.HexStringToColor(palette.accent).color, 1);
+  hover.lineStyle(4, hexToInt(palette.accent), 1);
   hover.strokeRoundedRect(0, 0, CARD_W, CARD_H, 6);
   hover.setVisible(false);
   card.add(hover);
@@ -195,17 +179,23 @@ export function createEnemyCard(
   card.add(hit);
   hit.setInteractive({ useHandCursor: true });
   let downOnCard = false;
+  let downX = 0;
+  let downY = 0;
   hit.on('pointerover', () => hover.setVisible(true));
   hit.on('pointerout', () => {
     hover.setVisible(false);
     downOnCard = false;
   });
-  hit.on('pointerdown', () => {
+  hit.on('pointerdown', (p: Phaser.Input.Pointer) => {
     downOnCard = true;
+    downX = p.x;
+    downY = p.y;
   });
-  hit.on('pointerup', () => {
+  hit.on('pointerup', (p: Phaser.Input.Pointer) => {
     if (!downOnCard) return;
     downOnCard = false;
+    // 拖拽超过阈值视为滚动而非点选（收敛图鉴滚动穿透误触）
+    if (Math.hypot(p.x - downX, p.y - downY) > 10) return;
     scene.tweens.add({ targets: card, scale: 1.03, duration: motion.feedback, yoyo: true });
     onSelect(enemy);
   });

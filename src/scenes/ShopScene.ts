@@ -6,11 +6,13 @@ import { readSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
 import { drawPixelBackdrop, pixelButton, walletBar, sceneHeader, sceneEnter, drawAmbient, KIT } from '../ui/components/kit.ts';
 import { ROLE_LABEL } from '../ui/components/cards.ts';
+import { typography } from '../ui/tokens.ts';
 
+// 渠道描边色：唯一源 = KIT（禁止散落 hex）
 const CHANNEL_STROKE: Record<string, number> = {
-  coins: 0xd9a53a, // 金币购：晨金
-  diamonds: 0x8e6fd8, // 钻石购：紫
-  gift: 0x6fa86b, // 赠送：草绿
+  coins: KIT.gold, // 金币购：晨金
+  diamonds: KIT.diamond, // 钻石购：紫
+  gift: KIT.success, // 赠送：草绿
 };
 const CHANNEL_LABEL: Record<string, string> = { coins: '金币购', diamonds: '钻石购', gift: '关卡赠送' };
 
@@ -21,7 +23,6 @@ const CHANNEL_LABEL: Record<string, string> = { coins: '金币购', diamonds: '�
  */
 export class ShopScene extends Phaser.Scene {
   private save?: SaveGame;
-  private parts: Phaser.GameObjects.GameObject[] = [];
 
   constructor() {
     super('Shop');
@@ -29,7 +30,6 @@ export class ShopScene extends Phaser.Scene {
 
   create(): void {
     ensurePixelTextures(this);
-    this.parts = []; // restart 不残留上轮引用（审查 P2-3）
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     const { width } = this.scale.gameSize;
     drawPixelBackdrop(this);
@@ -39,11 +39,6 @@ export class ShopScene extends Phaser.Scene {
     this.drawUnits(width);
     sceneEnter(this);
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('Menu'));
-  }
-
-  private track<T extends Phaser.GameObjects.GameObject>(go: T): T {
-    this.parts.push(go);
-    return go;
   }
 
   private drawUnits(width: number): void {
@@ -69,7 +64,7 @@ export class ShopScene extends Phaser.Scene {
       const y = y0 + row * (ch + gap);
 
       const stroke = CHANNEL_STROKE[acq.channel] ?? KIT.outline;
-      const card = this.track(this.add.container(x, y).setDepth(2));
+      const card = this.add.container(x, y).setDepth(2);
       const g = this.add.graphics();
       g.fillStyle(KIT.shadow, 0.3);
       g.fillRoundedRect(0, 5, cw, ch, 6);
@@ -85,21 +80,18 @@ export class ShopScene extends Phaser.Scene {
       card.add(gImg);
       card.add(this.add.image(62, 64, `unit_${u.id}`).setScale(0.85));
       // 右侧文字栏（立绘右缘 122 起）
-      card.add(this.add.text(122, 34, u.name, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '21px', fontStyle: 'bold', color: KIT.textDark }));
+      card.add(this.add.text(122, 34, u.name, { ...typography.subheading, color: KIT.textDark }));
       card.add(
         this.add
-          .text(122, 64, ROLE_LABEL[u.role] ?? u.role, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '13px', fontStyle: 'bold', color: KIT.textDark })
+          .text(122, 64, ROLE_LABEL[u.role] ?? u.role, { ...typography.caption, fontStyle: 'bold', color: KIT.textDark })
           .setAlpha(0.65),
       );
       const pricePart = acq.channel === 'gift' ? '赠送' : `${acq.channel === 'coins' ? '金币' : '钻石'} ${acq.price}`;
-      card.add(
-        this.add
-          .text(122, 90, pricePart, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#8A5F3C' }),
-      );
+      card.add(this.add.text(122, 90, pricePart, { ...typography.body, fontStyle: 'bold', color: KIT.textBrown }));
       // flavor 底部整行
       card.add(
         this.add
-          .text(16, 126, u.flavor, { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '13px', color: KIT.textDark })
+          .text(16, 126, u.flavor, { ...typography.caption, color: KIT.textDark })
           .setOrigin(0, 0)
           .setAlpha(0.75)
           .setWordWrapWidth(cw - 32),
@@ -107,19 +99,19 @@ export class ShopScene extends Phaser.Scene {
       // 渠道徽章（左下小标签）
       card.add(
         this.add
-          .text(16, ch - 34, CHANNEL_LABEL[acq.channel] ?? '', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '12px', color: '#8A5F3C' })
+          .text(16, ch - 34, CHANNEL_LABEL[acq.channel] ?? '', { ...typography.caption, color: KIT.textBrown })
           .setAlpha(0.85),
       );
       // 右下状态/购买钮（与徽章同排，互不重叠）
       if (isOwned) {
-        card.add(this.add.text(cw - 16, ch - 34, '已拥有', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '14px', fontStyle: 'bold', color: '#5E7A66' }).setOrigin(1, 0));
+        card.add(this.add.text(cw - 16, ch - 34, '已拥有', { ...typography.caption, fontStyle: 'bold', color: KIT.textSub }).setOrigin(1, 0));
       } else if (acq.channel === 'gift') {
-        card.add(this.add.text(cw - 16, ch - 34, '通关解锁', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '14px', color: '#8A5F3C' }).setOrigin(1, 0));
+        card.add(this.add.text(cw - 16, ch - 34, '通关解锁', { ...typography.caption, color: KIT.textBrown }).setOrigin(1, 0));
       } else if (acq.price !== undefined) {
         const canBuy = acq.channel === 'coins' ? (this.save?.wallet.coins ?? 0) >= acq.price : (this.save?.wallet.diamonds ?? 0) >= acq.price;
         pixelButton(this, x + cw - 116, y + ch - 54, 100, 42, canBuy ? '购买' : '差钱', {
           depth: 4,
-          accent: canBuy ? 0x6fbf83 : 0xb3ad9c,
+          accent: KIT.success,
           enabled: canBuy,
           onClick: () => this.buy(u, acq.channel as 'coins' | 'diamonds', acq.price as number),
         });
@@ -146,7 +138,7 @@ export class ShopScene extends Phaser.Scene {
     }
     this.registry.set('save', save);
     if (!ok) {
-      this.track(this.add.text(960, 1020, '存档写入失败（浏览器存储不可用），本次购买未保存', { fontFamily: 'system-ui, "PingFang SC", sans-serif', fontSize: '16px', color: '#B23A2E' }).setOrigin(0.5).setDepth(20));
+      this.add.text(960, 1020, '存档写入失败（浏览器存储不可用），本次购买未保存', { ...typography.body, color: KIT.dangerCss }).setOrigin(0.5).setDepth(20);
       return;
     }
     this.scene.restart();
