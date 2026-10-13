@@ -54,7 +54,9 @@ export function planWave(state: BattleState): { id: string; row: number }[] {
   const queue: { id: string; row: number }[] = [];
   if (pool.length === 0) return queue;
 
-  const w = state.wave + 1;
+  // 注意：startWave 已先把 state.wave 置为"本波序号"，此处不得再 +1
+  // （原实现 `state.wave + 1` 是双重递增 → 每波吃下一波预算、末波 ×2.5 大波系数从未生效，2026-10-14 修正）
+  const w = state.wave;
   const budget = waveBudget(level, w);
   const huge = isHugeWave(level, w);
   const plain = plainStandIn(pool);
@@ -64,12 +66,18 @@ export function planWave(state: BattleState): { id: string; row: number }[] {
     for (let i = 0; i < Math.max(0, n); i++) queue.push({ id: plain.id, row: state.rng.int(0, 6) });
   }
 
-  // 前 3 波保底：每个池内敌人至少出现一次
+  let left = budget;
+  // 前 3 波保底：每个池内敌人至少出现一次（**计入预算**）。
+  // 原实现不扣预算，与随机段叠加后首波实际密度可达预算的 2 倍以上（群怪 1 点换 4 身体更放大），
+  // 是 2026-10-14 "第一波出怪太多"的直接成因；预算不足则该敌顺延到后续波。
   if (w <= 3) {
-    for (const e of pool) queue.push({ id: e.id, row: state.rng.int(0, 6) });
+    for (const e of pool) {
+      if (e.points > left) continue;
+      queue.push({ id: e.id, row: state.rng.int(0, 6) });
+      left -= e.points;
+    }
   }
 
-  let left = budget;
   let guard = 0;
   const perWaveCount = new Map<string, number>();
   const maxPoints = Math.max(...pool.map((e) => e.points));

@@ -118,8 +118,8 @@ describe('M3A battle kernel: wave pacing (PvZ1 口径)', () => {
     expect(waveBudget(lv, lv.waves)).toBeGreaterThan(waveBudget(lv, 1) * 2);
   });
 
-  it('firstWaveDelayMs：全关卡 18s（PvZ1 GameConstants.h 权威口径）', () => {
-    expect(firstWaveDelayMs(lv)).toBe(18000);
+  it('firstWaveDelayMs：teach=25s（2026-10-14 首波缓冲放宽）', () => {
+    expect(firstWaveDelayMs(lv)).toBe(25000);
   });
 });
 

@@ -49,7 +49,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     biteDps: 4,
     armor: 'cloth',
     traits: ['swarm'],
-    points: enemyPoints(50, []),
+    points: enemyPoints(50, ['swarm']),
   },
   {
     id: 'vine_boa',

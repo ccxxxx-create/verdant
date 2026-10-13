@@ -19,8 +19,8 @@ export const SHIELD_HP = 250;
 
 /** 波次节奏（秒）。key 覆盖全部 LevelDef.template，未覆盖走 default。 */
 export const WAVE_PACING = {
-  /** 首波延迟（PvZ1 GameConstants.h:39-44 权威口径：全关卡 18s）。 */
-  firstWave: { teach: 18, normal: 18, flag: 18, survive: 18, boss: 18, chal: 18, conveyor: 18, default: 18 } as Record<string, number>,
+  /** 首波延迟（2026-10-14 用户试玩裁定"第一波出怪太快"：在 PvZ1 18s 基准上按模板再放宽）。 */
+  firstWave: { teach: 25, normal: 22, flag: 20, survive: 20, boss: 20, chal: 22, conveyor: 20, default: 22 } as Record<string, number>,
   /** 常规波间隔基数（+ rand(0, range)；PvZ1：25s + rand(0~6s)）。 */
   betweenWaves: { base: 25, range: 6 },
   /** 波内出怪间隔。 */

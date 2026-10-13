@@ -79,6 +79,12 @@ export const TRAIT_BONUS: Record<string, number> = {
   charge: 3,
   grab: 3,
   summon: 4,
+  /**
+   * 群体展开：一次出怪生成 4 个身体（spawnQueuedEnemy 的 swarm 展开）。
+   * 计点必须反映实际威胁，否则"1 点换 4 个身体"会让含群怪的波次密度失真
+   * （2026-10-14 首波密度修正：灰潮群 1 点 → 4 点）。
+   */
+  swarm: 3,
 };
 
 export function enemyPoints(hp: number, traits: readonly string[]): number {
