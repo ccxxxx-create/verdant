@@ -136,6 +136,6 @@ export const POWER_KNOCKBACK_CELLS = 1;
 export const POWER_KNOCKBACK_RADIUS = 1.5;
 /** 大招拖空白：火焰伤害。 */
 export const POWER_KNOCKBACK_DAMAGE = 100;
-/** 局内能量掉落持有上限（GDD 搂13.1）。 */
-export const PLANT_FOOD_CAP = 5;
+/** 局内能量掉落持有上限（PvZ2 口径：基础 3，古埃及升级 4，内购 5）。 */
+export const PLANT_FOOD_CAP = 3;
 

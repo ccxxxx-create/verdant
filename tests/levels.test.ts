@@ -46,8 +46,8 @@ describe('level definitions parse against schema', () => {
     expect(r.success).toBe(true);
     if (r.success) {
       expect(r.data.template).toBe('teach');
-      expect(r.data.waves).toBe(10);
-      expect(r.data.startingLight).toBe(50); // M2：PvZ1 口径
+      expect(r.data.waves).toBe(5); // PvZ2 口径：1 面旗 = 5 波（wiki.gg 关卡页）
+      expect(r.data.startingLight).toBe(50); // PvZ2 口径：普通关卡初始阳光 50
       expect(r.data.pool).toEqual(['march_ant']);
     }
   });

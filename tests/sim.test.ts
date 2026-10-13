@@ -105,21 +105,21 @@ function snapshot(state: BattleState): Record<string, unknown> {
   };
 }
 
-describe('M3A battle kernel: wave pacing (PvZ1 口径)', () => {
+describe('M3A battle kernel: wave pacing (PvZ2 口径)', () => {
   const lv = levelById('meadow-1-1');
   it('isHugeWave：末波恒为大波，flagEvery=10 中间波不触发', () => {
     expect(isHugeWave(lv, lv.waves)).toBe(true);
-    expect(isHugeWave(lv, 5)).toBe(false);
+    expect(isHugeWave(lv, 3)).toBe(false); // 中间波（非末波、非 10 的倍数）
     expect(isHugeWave(lv, 0)).toBe(false);
   });
 
   it('waveBudget：teach 缩放 0.35 + 终波 ×2.5', () => {
-    expect(waveBudget(lv, 1)).toBe(3); // round(6 × 1.3 × 0.35) = round(2.73)
+    expect(waveBudget(lv, 1)).toBe(5); // round(10 × 1.3 × 0.35) = round(4.55)；base 由 PvZ2 重锚后扫荡校准
     expect(waveBudget(lv, lv.waves)).toBeGreaterThan(waveBudget(lv, 1) * 2);
   });
 
-  it('firstWaveDelayMs：teach=25s（2026-10-14 首波缓冲放宽）', () => {
-    expect(firstWaveDelayMs(lv)).toBe(25000);
+  it('firstWaveDelayMs：全关卡 2s（PvZ2 权威口径：关卡开始 2 秒后首波）', () => {
+    expect(firstWaveDelayMs(lv)).toBe(2000);
   });
 });
 

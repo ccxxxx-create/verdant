@@ -6,10 +6,10 @@ import type { BattleConfig, BattleState, BattleEvent, UnitInst, EnemyInst, ProjI
 import { Rng } from '../rng.ts';
 import {
   ARMOR_MULT,
-  ENEMY_BITE_DPS,
+  DECK_CAP,
   SKY_SUN,
-  BOSS_BITE_DPS,
   WAVE_PACING,
+  enemyBiteDps,
 } from '../balance.ts';
 import {
   BITE_OFFSET,
@@ -54,8 +54,6 @@ import {
   revealStep,
 } from './traits.ts';
 import { POWER_GENERIC_DAMAGE_MULT, isPowered, tickPowerUps, usePlantFoodAtCell, usePlantFoodOnUnit } from './power.ts';
-
-const DECK_CAP = 8;
 
 export function createBattle(config: BattleConfig): BattleState {
   const deck = config.deck
@@ -480,7 +478,7 @@ function updateEnemies(state: BattleState, dtMs: number): void {
           // gnaw_pause: 本帧停下啃咬
         } else if (e.biteTarget) {
           const target = e.biteTarget;
-          target.hp -= (e.def.isBoss ? BOSS_BITE_DPS : e.def.biteDps || ENEMY_BITE_DPS) * (dtMs / 1000);
+          target.hp -= enemyBiteDps(e.def) * (dtMs / 1000);
           e.x = target.x + BITE_OFFSET;
           state.events.push({ t: 'hit', x: target.x, y: target.y, damage: 0, element: 'none', target: 'unit', tid: target.uid });
           if (target.hp <= 0) {

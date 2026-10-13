@@ -6,6 +6,7 @@ import { registryFrom } from '../core/registry.ts';
 import { allUnits } from '../data/archetypes/index.ts';
 import { ensurePixelTextures } from '../scenes/BattleScene.ts';
 import { pixelPanel, KIT } from './components/kit.ts';
+import { DECK_CAP } from '../core/balance.ts';
 import { palette, worldPalette, typography, radius, hexToInt } from './tokens.ts';
 
 /**
@@ -13,8 +14,6 @@ import { palette, worldPalette, typography, radius, hexToInt } from './tokens.ts
  * owned 中勾选 ≤8，默认全选截前 8；传送带关跳过选卡直接开战（M3-D2）。
  * 纪律：交互 zone 场景级；部件统一 parts 数组管理（场景重启自清）。
  */
-
-const DECK_CAP = 8;
 
 let deckPickerOpen = false;
 

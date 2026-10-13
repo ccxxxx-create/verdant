@@ -4,7 +4,7 @@
   "template": "conveyor",
   "rows": 6,
   "cols": 9,
-  "waves": 20,
+  "waves": 5,
   "pool": ["march_ant", "grey_tide_swarm", "iron_beak_sparrow"],
   "unlockUnits": [],
   "starCondition": "deck_le6",

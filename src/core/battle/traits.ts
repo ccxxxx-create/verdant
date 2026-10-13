@@ -5,7 +5,7 @@
  */
 import type { BattleState, EnemyInst, UnitInst } from './types.ts';
 import { BITE_OFFSET, COL_W, cellY } from './layout.ts';
-import { ENEMY_BITE_DPS, GNAW_PAUSE_S, MOTH_EAT_R, WEB_STUN_S } from '../balance.ts';
+import { GNAW_PAUSE_S, MOTH_EAT_R, WEB_STUN_S, enemyBiteDps } from '../balance.ts';
 
 /** 同排前方最近的啃食目标；targets_attackers 优先咬攻击植物。 */
 export function findBiteTarget(state: BattleState, e: EnemyInst): UnitInst | undefined {
@@ -36,7 +36,7 @@ export function gnawPauseStep(state: BattleState, e: EnemyInst, dtMs: number): b
   e.gnawed ??= new Set<number>();
   if (e.gnawed.has(target.uid)) return false;
   e.gnawed.add(target.uid);
-  const dmg = ENEMY_BITE_DPS * GNAW_PAUSE_S;
+  const dmg = enemyBiteDps(e.def) * GNAW_PAUSE_S; // 与主啃食同口径（审查 P2：此前直读基准常量，Boss/特化敌人会脱节）
   target.hp -= dmg;
   state.events.push({ t: 'hit', x: target.x, y: target.y, damage: dmg, element: 'none', target: 'unit', tid: target.uid });
   if (target.hp <= 0) state.events.push({ t: 'unitDeath', unit: target, x: target.x, y: target.y });
