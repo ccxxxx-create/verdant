@@ -25,7 +25,16 @@ export const FONT = FONT_STACK;
  * 新增字号必须先登记本表，再由场景引用（消除散落 fontSize 字面量）。
  */
 export const typography = {
+  /** 品牌字（主界面 Logo，全站最大号）。 */
+  brand: { fontFamily: FONT_STACK, fontSize: '104px', fontStyle: 'bold' },
+  /** 一级动作（主 CTA）——必须与页标题(title)拉开层级，否则"主次不分"。 */
   display: { fontFamily: FONT_STACK, fontSize: '48px', fontStyle: 'bold' },
+  /** 大号数值（HUD 资源徽记）。 */
+  numeric: { fontFamily: FONT_STACK, fontSize: '40px', fontStyle: 'bold' },
+  /** 输入框回显（兑换码等大号单行输入）。 */
+  input: { fontFamily: FONT_STACK, fontSize: '40px', fontStyle: 'bold' },
+  /** 结算庆祝（星级/胜负大字）。 */
+  celebration: { fontFamily: FONT_STACK, fontSize: '56px', fontStyle: 'bold' },
   title: { fontFamily: FONT_STACK, fontSize: '34px', fontStyle: 'bold' },
   heading: { fontFamily: FONT_STACK, fontSize: '24px', fontStyle: 'bold' },
   subheading: { fontFamily: FONT_STACK, fontSize: '20px', fontStyle: 'bold' },
@@ -35,7 +44,7 @@ export const typography = {
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 
-export const radius = { sm: 4, md: 8, lg: 16 } as const;
+export const radius = { xs: 2, sm: 4, md: 8, lg: 12 } as const;
 
 /** 层级（z-index）单一事实源：背景 → 氛围 → 面板 → 内容 → HUD → 弹层 → 对话框。 */
 export const zIndex = { bg: 0, ambient: 1, panel: 2, content: 3, hud: 10, overlay: 30, dialog: 31 } as const;

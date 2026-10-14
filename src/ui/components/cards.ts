@@ -6,7 +6,10 @@ import { KIT, chip } from './kit.ts';
 
 const P = PALETTE as Record<string, string>;
 
-/** 图鉴/编成共用的卡片底板（M3B 像素语言）：纸底+语义色描边+实色偏移投影。 */
+/**
+ * 图鉴/编成共用的卡片底板（M3B 像素语言）：纸底 + 语义色描边 + 实色偏移投影 + 顶部受光带。
+ * 受光带与 pixelButton / seedCardBase 同语言 —— 消除"按钮亮、卡片哑"的材质断层。
+ */
 export function cardFrame(
   scene: Phaser.Scene,
   w: number,
@@ -15,11 +18,13 @@ export function cardFrame(
 ): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics();
   g.fillStyle(KIT.shadow, 0.3);
-  g.fillRoundedRect(0, 5, w, h, 6);
+  g.fillRoundedRect(0, 5, w, h, radius.sm);
   g.fillStyle(KIT.paper, 0.97);
-  g.fillRoundedRect(0, 0, w, h, 6);
+  g.fillRoundedRect(0, 0, w, h, radius.sm);
+  g.fillStyle(0xffffff, 0.2);
+  g.fillRoundedRect(4, 3, w - 8, Math.max(6, Math.min(22, h * 0.1)), radius.xs);
   g.lineStyle(3, hexToInt(color), 1);
-  g.strokeRoundedRect(0, 0, w, h, 6);
+  g.strokeRoundedRect(0, 0, w, h, radius.sm);
   return g;
 }
 

@@ -1,4 +1,5 @@
 import type { LevelDef } from './schema/level.ts';
+import type { ItemEffect } from '../data/items.ts';
 import {
   FIRST_THREE_STAR_DIAMONDS,
   LEVEL_STAR_REWARDS,
@@ -21,6 +22,8 @@ export interface RewardInput {
   previousStars: number | null;
   /** 里程碑发放前的累计星数 */
   totalStarsBefore: number;
+  /** 出战前携带的道具效果（M-INV；仅 clearBonus 在结算层生效）。 */
+  carriedItem?: ItemEffect;
 }
 
 /** 星星里程碑（累计星数跨越档位时发种子券）。 */
@@ -42,11 +45,17 @@ export function levelClearReward(input: RewardInput): LevelReward {
   const { level, stars, previousStars, totalStarsBefore } = input;
   const isReplay = previousStars !== null && previousStars >= stars;
   const base = LEVEL_STAR_REWARDS[stars];
-  const coins = isReplay ? Math.floor(base * REPLAY_FACTOR) : base;
+  let coins = isReplay ? Math.floor(base * REPLAY_FACTOR) : base;
   const firstThreeStar = previousStars !== 3 && stars === 3;
   const diamonds = firstThreeStar ? FIRST_THREE_STAR_DIAMONDS : 0;
   const totalStarsAfter = totalStarsBefore - (previousStars ?? 0) + stars;
-  const seeds = milestoneSeeds(totalStarsBefore, totalStarsAfter);
+  let seeds = milestoneSeeds(totalStarsBefore, totalStarsAfter);
+  // 携带道具「幸运四叶草」：通关金币倍率 + 额外种子券（结算层唯一生效点）
+  const cb = input.carriedItem;
+  if (cb?.t === 'clearBonus') {
+    coins = Math.floor(coins * cb.coinMult);
+    seeds += cb.bonusSeeds;
+  }
   return { coins, diamonds, seeds, plantFood: PLANT_FOOD_PER_CLEAR, ...(level ? {} : {}) };
 }
 

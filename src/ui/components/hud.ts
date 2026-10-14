@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FONT, zIndex } from '../tokens.ts';
+import { FONT, typography, zIndex } from '../tokens.ts';
 import { KIT } from './kit.ts';
 
 /**
@@ -40,12 +40,13 @@ export function resourceBadge(
   y: number,
   icon: string,
   value: string,
-  opts: { depth?: number; color?: string; iconScale?: number; fontSize?: string } = {},
+  opts: { depth?: number; color?: string; iconSize?: number } = {},
 ): { container: Phaser.GameObjects.Container; valueText: Phaser.GameObjects.Text } {
   const c = scene.add.container(x, y).setDepth(opts.depth ?? zIndex.hud + 1);
-  c.add(scene.add.image(0, 0, icon).setScale(opts.iconScale ?? 3));
+  // 图标用显示尺寸锁定（icon_ 纹理 16×16×4=64px；setScale(3) 会放大到 192px 并溢出 HUD 带）
+  c.add(scene.add.image(0, 0, icon).setDisplaySize(opts.iconSize ?? 44, opts.iconSize ?? 44));
   const valueText = scene.add
-    .text(44, 0, value, { fontFamily: FONT, fontSize: opts.fontSize ?? '40px', fontStyle: 'bold', color: opts.color ?? KIT.goldCss })
+    .text(38, 0, value, { ...typography.numeric, color: opts.color ?? KIT.goldCss })
     .setOrigin(0, 0.5);
   c.add(valueText);
   return { container: c, valueText };
@@ -83,9 +84,9 @@ export function costBadge(
   opts: { depth?: number; color?: string } = {},
 ): { container: Phaser.GameObjects.Container; text: Phaser.GameObjects.Text } {
   const c = scene.add.container(x, y).setDepth(opts.depth ?? 0);
-  c.add(scene.add.image(0, 0, 'icon_lightdew').setScale(1.1));
+  c.add(scene.add.image(0, 0, 'icon_lightdew').setDisplaySize(22, 22));
   const text = scene.add
-    .text(16, 0, String(cost), { fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: opts.color ?? KIT.outlineCss })
+    .text(16, 0, String(cost), { ...typography.subheading, color: opts.color ?? KIT.outlineCss })
     .setOrigin(0, 0.5);
   c.add(text);
   return { container: c, text };
@@ -112,5 +113,6 @@ export function drawWaveProgress(
     g.fillStyle(KIT.gold, 1);
     g.fillRoundedRect(x, y1 - h, w, h, 6);
   }
-  return Math.max(y0 + 24, y1 - (y1 - y0) * r);
+  // r=0（每局开局）时也要保证旗帜完整可见：clamp 上下各留半个旗高
+  return Math.min(y1 - 40, Math.max(y0 + 40, y1 - (y1 - y0) * r));
 }

@@ -17,7 +17,7 @@ describe('pixel sprite data integrity', () => {
   it('all 11 enemy sprites + 4 projectiles + 20 icons are valid', () => {
     expect(Object.keys(allEnemySprites)).toHaveLength(11);
     expect(Object.keys(allProjectileSprites)).toHaveLength(4);
-    expect(Object.keys(allPixelIcons)).toHaveLength(29);
+    expect(Object.keys(allPixelIcons)).toHaveLength(34); // 29 基础 + 4 道具 + 背包（M-INV）
     expect(allPixelIcons.lightdew).toBeDefined();
     expect(allPixelIcons.gate).toBeDefined();
     expect(allPixelIcons.flag).toBeDefined();

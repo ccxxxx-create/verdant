@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { enemyPoints } from './unit';
 
 /**
- * 存档 schema v5（M-UI：新增 settings.motion 减弱动态开关；v4 = M2 经济）。
+ * 存档 schema v6（M-INV：新增 inventory 道具持有 + stats.redeemCount 兑换计数；v5 = 减弱动态开关）。
  * 纪律：字段只增不删；未知 key 由 migrate 末端 shapeCurrent 剥离（不整档拒绝）。
  */
-export const SaveV5 = z.strictObject({
-  schemaVersion: z.literal(5),
+export const SaveV6 = z.strictObject({
+  schemaVersion: z.literal(6),
   updatedAt: z.string(),
   progress: z.strictObject({
     clearedLevels: z.array(z.string()),
@@ -21,6 +21,8 @@ export const SaveV5 = z.strictObject({
     seeds: z.number().int().nonnegative(),
     plantFood: z.number().int().nonnegative(),
   }),
+  /** 道具持有：itemId → 数量（仅非负整数；空对象 = 未持有任何道具）。 */
+  inventory: z.record(z.string(), z.number().int().nonnegative()),
   /** 抽奖计数（保底统计用）。 */
   gacha: z.strictObject({
     singlePulls: z.number().int().nonnegative(),
@@ -40,15 +42,17 @@ export const SaveV5 = z.strictObject({
     playSeconds: z.number().int().nonnegative(),
     wins: z.number().int().nonnegative(),
     losses: z.number().int().nonnegative(),
+    /** 兑换码累计兑换次数（6666 可重复兑换；为日后切换一次性兑换留接口）。 */
+    redeemCount: z.number().int().nonnegative(),
   }),
 });
 
-export type SaveGame = z.infer<typeof SaveV5>;
-export const CURRENT_SCHEMA_VERSION = 5;
+export type SaveGame = z.infer<typeof SaveV6>;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 export function defaultSave(): SaveGame {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     updatedAt: new Date(0).toISOString(),
     progress: {
       clearedLevels: [],
@@ -57,9 +61,10 @@ export function defaultSave(): SaveGame {
       currentWorld: 'meadow',
     },
     wallet: { coins: 0, diamonds: 0, seeds: 0, plantFood: 0 },
+    inventory: {},
     gacha: { singlePulls: 0, diamondTenPulls: 0 },
     settings: { master: 0.8, music: 0.6, sfx: 1, quality: 'auto', speedDefault: 1, handLayout: 'right', motion: true },
-    stats: { playSeconds: 0, wins: 0, losses: 0 },
+    stats: { playSeconds: 0, wins: 0, losses: 0, redeemCount: 0 },
   };
 }
 
@@ -123,7 +128,17 @@ function toV5(v4: Unknown): Unknown {
   };
 }
 
-const MIGRATIONS: Record<number, (v: Unknown) => Unknown> = { 1: toV2, 2: toV3, 3: toV4, 4: toV5 };
+/** v5→v6：新增 inventory（道具持有，旧档为空）与 stats.redeemCount（兑换计数）。 */
+function toV6(v5: Unknown): Unknown {
+  return {
+    ...v5,
+    schemaVersion: 6,
+    inventory: { ...((v5['inventory'] as Unknown) ?? {}) },
+    stats: { ...((v5['stats'] as Unknown) ?? {}), redeemCount: 0 },
+  };
+}
+
+const MIGRATIONS: Record<number, (v: Unknown) => Unknown> = { 1: toV2, 2: toV3, 3: toV4, 4: toV5, 5: toV6 };
 
 function num(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -140,6 +155,7 @@ function shapeCurrent(v: Unknown): Unknown {
   const st = (v['stats'] as Unknown) ?? {};
   const w = (v['wallet'] as Unknown) ?? {};
   const g = (v['gacha'] as Unknown) ?? {};
+  const inv = (v['inventory'] as Unknown) ?? {};
   const strArr = (x: unknown): string[] => (Array.isArray(x) ? x.filter((i): i is string => typeof i === 'string') : []);
   const WORLDS = ['meadow', 'reef', 'sky', 'frost'];
   const QUALITIES = ['auto', 'high', 'medium', 'low'];
@@ -148,6 +164,12 @@ function shapeCurrent(v: Unknown): Unknown {
   for (const [k, val] of Object.entries(starsRaw)) {
     const n = num(val, -1);
     if (Number.isInteger(n) && n >= 0 && n <= 3) stars[k] = n;
+  }
+  // 道具持有：只保留正整数数量（0 与非法项丢弃，避免脏键堆积）
+  const inventory: Record<string, number> = {};
+  for (const [k, val] of Object.entries(inv)) {
+    const n = num(val, -1);
+    if (k.length > 0 && Number.isInteger(n) && n > 0) inventory[k] = n;
   }
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -164,6 +186,7 @@ function shapeCurrent(v: Unknown): Unknown {
       seeds: nonNeg(w['seeds']),
       plantFood: nonNeg(w['plantFood']),
     },
+    inventory,
     gacha: {
       singlePulls: nonNeg(g['singlePulls']),
       diamondTenPulls: nonNeg(g['diamondTenPulls']),
@@ -181,6 +204,7 @@ function shapeCurrent(v: Unknown): Unknown {
       playSeconds: nonNeg(st['playSeconds']),
       wins: nonNeg(st['wins']),
       losses: nonNeg(st['losses']),
+      redeemCount: nonNeg(st['redeemCount']),
     },
   };
 }

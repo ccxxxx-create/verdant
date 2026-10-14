@@ -66,17 +66,24 @@ export function createBattle(config: BattleConfig): BattleState {
   const conveyor = level.conveyor
     ? { hand: [] as string[], timer: level.conveyor.intervalMs, exhausted: [] as string[] }
     : null;
+  // 出战携带道具（M-INV）：只修正初始状态，不引入新命令
+  const carried = config.carriedItem?.effect;
+  const bonusLightdew = carried?.t === 'bonusLightdew' ? carried.amount : 0;
+  const bonusPlantFood = carried?.t === 'bonusPlantFood' ? carried.amount : 0;
+  const mowerWardS = carried?.t === 'mowerWard' ? carried.durationS : 0;
   return {
     config: { ...config, deck: effectiveDeck },
     rng: new Rng(config.seed ?? 0x5eed),
     now: 0,
-    lightdew: conveyor ? 0 : level.startingLight,
-    plantFood: 0,
+    lightdew: (conveyor ? 0 : level.startingLight) + bonusLightdew,
+    plantFood: bonusPlantFood,
     units: [],
     enemies: [],
     projectiles: [],
     drops: [],
     mowers: Array.from({ length: ROWS }, () => true),
+    mowerWardUntil: mowerWardS * 1000,
+    mowerWardUsed: Array.from({ length: ROWS }, () => false),
     wave: 0,
     waveTimer: firstWaveDelayMs(level),
     waveAge: 0,
@@ -499,6 +506,18 @@ function updateEnemies(state: BattleState, dtMs: number): void {
 
     if (e.x < MOWER_LINE) {
       const row = e.row;
+      // 荆棘护盾（M-INV）：限时内每行首次突破免消耗割草机（只读判定，不新增命令）
+      if (state.mowerWardUntil > state.now && !state.mowerWardUsed[row]) {
+        state.mowerWardUsed[row] = true;
+        state.events.push({ t: 'banner', text: '荆棘护盾挡住了！', hold: 1.1 });
+        for (const other of [...state.enemies]) {
+          if (other.row === row && other.hp > 0) {
+            other.hp = 0;
+            killEnemy(state, other);
+          }
+        }
+        continue;
+      }
       if (state.mowers[row]) {
         state.mowers[row] = false;
         state.stats.mowersUsed += 1;

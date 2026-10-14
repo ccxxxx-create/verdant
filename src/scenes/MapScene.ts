@@ -48,23 +48,47 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  /** 相邻节点虚线路径（量产与否都画：路径是地图结构，节点态才是内容态）。 */
+  /** 像素点划线（8px 实 + 8px 空）：像素风里"路"应是点划而非实线；已通段用金色承载进度。 */
+  private dashLine(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number, color: number, alpha: number): void {
+    const horizontal = y0 === y1;
+    const from = horizontal ? Math.min(x0, x1) : Math.min(y0, y1);
+    const to = horizontal ? Math.max(x0, x1) : Math.max(y0, y1);
+    g.fillStyle(color, alpha);
+    for (let d = from; d < to; d += 16) {
+      const seg = Math.min(8, to - d);
+      if (horizontal) g.fillRect(Math.round(d), Math.round(y0) - 1, Math.round(seg), 3);
+      else g.fillRect(Math.round(x0) - 1, Math.round(d), 3, Math.round(seg));
+    }
+  }
+
+  /** 相邻节点点划线路径（量产与否都画：路径是地图结构，节点态才是内容态）。 */
   private drawPaths(): void {
     const g = this.add.graphics().setDepth(1);
-    g.lineStyle(3, KIT.outline, 0.25);
+    const cleared = this.save?.progress.clearedLevels ?? [];
     for (let i = 0; i < MAP_NODES.length - 1; i++) {
       const a = MAP_NODES[i];
       const b = MAP_NODES[i + 1];
       if (!a || !b) continue;
       if (a.seg !== b.seg) continue; // 跨段不连线（段间由段牌分界）
+      const done = cleared.includes(a.id);
+      const color = done ? KIT.goldMid : KIT.outline;
+      const alpha = done ? 0.55 : 0.22;
       const midX = (a.x + b.x) / 2;
-      g.beginPath();
-      g.moveTo(a.x, a.y);
-      g.lineTo(midX, a.y);
-      g.lineTo(midX, b.y);
-      g.lineTo(b.x, b.y);
-      g.strokePath();
+      this.dashLine(g, a.x, a.y, midX, a.y, color, alpha);
+      this.dashLine(g, midX, a.y, midX, b.y, color, alpha);
+      this.dashLine(g, midX, b.y, b.x, b.y, color, alpha);
     }
+  }
+
+  /** 节点右上角的像素锁（锁定态语义可视化：此前仅靠灰色 caption，状态不可扫读）。 */
+  private drawLockIcon(x: number, y: number): void {
+    const g = this.add.graphics().setDepth(4);
+    g.lineStyle(3, KIT.outline, 0.8);
+    g.strokeRoundedRect(x - 7, y - 15, 14, 13, 6);
+    g.fillStyle(KIT.outline, 0.8);
+    g.fillRoundedRect(x - 10, y - 5, 20, 16, 3);
+    g.fillStyle(KIT.paper, 1);
+    g.fillRect(x - 2, y, 4, 7);
   }
 
   private drawNodes(width: number): void {
@@ -103,7 +127,8 @@ export class MapScene extends Phaser.Scene {
       shadow: state !== 'locked',
     });
     if (state === 'locked') panel.setAlpha(0.55);
-    if (state === 'open') breathe(this, panel, 2400, 1.02);
+    // 呼吸幅度 1.02 在 84px 方块上仅 1.7px（肉眼不可察）→ 提到 1.035
+    if (state === 'open') breathe(this, panel, 2400, 1.035);
 
     this.add
       .text(x, node.y - 6, node.label, {
@@ -123,13 +148,15 @@ export class MapScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(4);
     } else if (state === 'locked') {
+      // 两种"锁"语义分开：未解锁（前置关未通）vs 量产中（关卡数据未落盘）
       this.add
         .text(x, node.y + 20, produced ? '未解锁' : '量产中', {
           ...typography.caption,
-          color: KIT.textSub,
+          color: produced ? KIT.textSub : KIT.infoCss,
         })
         .setOrigin(0.5)
         .setDepth(4);
+      this.drawLockIcon(x + NODE_R - 14, node.y - NODE_R + 16);
     }
 
     if ((state === 'open' || state === 'cleared') && level) {

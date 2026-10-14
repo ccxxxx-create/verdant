@@ -43,7 +43,7 @@ describe('M2 economy: gacha', () => {
     const sum = GACHA_POOL.reduce((s, e) => s + e.weight, 0);
     expect(sum).toBe(100);
     for (const e of GACHA_POOL) {
-      expect(['unit', 'coins', 'diamonds', 'seeds', 'plantFood']).toContain(e.kind);
+      expect(['unit', 'coins', 'diamonds', 'seeds', 'plantFood', 'item']).toContain(e.kind);
     }
   });
 

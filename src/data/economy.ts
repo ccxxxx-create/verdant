@@ -31,6 +31,21 @@ export const UNIT_ACQUISITION: Record<string, UnitAcquisition> = {
   mist_lamp: { channel: 'diamonds', price: 8, note: '驱散遮挡（M3 实装）' },
 };
 
+/** 道具购买渠道（M-INV）：道具只有金币/钻石购，无赠送渠道。 */
+export interface ItemAcquisition {
+  channel: 'coins' | 'diamonds';
+  price: number;
+  note: string;
+}
+
+/** 4 个可用道具的定价（键与 data/items.ts 的 ITEMS 一一对应）。 */
+export const ITEM_ACQUISITION: Record<string, ItemAcquisition> = {
+  lightdew_jar: { channel: 'coins', price: 400, note: '起手光露补充' },
+  energy_core: { channel: 'diamonds', price: 3, note: '多两轮强化' },
+  thorn_ward: { channel: 'diamonds', price: 4, note: '开局容错' },
+  lucky_clover: { channel: 'diamonds', price: 8, note: '通关收益增益' },
+};
+
 /** 关卡首通金币奖励（按星级梯度）。 */
 export const LEVEL_STAR_REWARDS: Record<1 | 2 | 3, number> = { 1: 20, 2: 40, 3: 60 };
 

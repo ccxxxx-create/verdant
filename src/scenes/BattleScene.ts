@@ -25,6 +25,7 @@ import {
   drawWaveProgress as paintWaveBar,
 } from '../ui/components/hud.ts';
 import { modal, settlement, type ModalHandle } from '../ui/components/overlay.ts';
+import { itemById, type ItemEffect } from '../data/items.ts';
 import {
   createBattle,
   step,
@@ -139,6 +140,9 @@ export class BattleScene extends Phaser.Scene {
   private settleModal?: ModalHandle;
   private pauseBtnText?: Phaser.GameObjects.Text;
   private waveFlag?: Phaser.GameObjects.Image;
+  /** 出战携带的道具（M-INV；由 DeckPicker 经 registry 一次性注入）。 */
+  private carriedItem?: { id: string; effect: ItemEffect };
+  private wardText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Battle');
@@ -149,6 +153,10 @@ export class BattleScene extends Phaser.Scene {
     const injected = this.registry.get('level') as LevelDef | undefined;
     if (injected) this.level = injected;
     this.registry.remove('level'); // 一次性消费（与 deck 同纪律，审查 P2）
+    // 一次性消费（与 level/deck 同纪律）；null = 明确不携带，缺键同样视为不携带（进入 Battle 必经 DeckPicker 显式写入）
+    const carried = this.registry.get('carriedItem') as { id: string; effect: ItemEffect } | null | undefined;
+    this.carriedItem = carried ?? undefined;
+    this.registry.remove('carriedItem');
     this.save = (this.registry.get('save') as SaveGame | undefined) ?? readSave(window.localStorage);
     this.resetState();
     ensurePixelTextures(this);
@@ -188,6 +196,7 @@ export class BattleScene extends Phaser.Scene {
       enemies: this.reg.enemyById,
       deck: this.resolveDeck(),
       seed: 0x5eed, // 波次序列可复现
+      ...(this.carriedItem ? { carriedItem: this.carriedItem } : {}),
     });
     this.fxRng = new Rng(0xfacade);
     this.speed = 1;
@@ -213,6 +222,7 @@ export class BattleScene extends Phaser.Scene {
     this.settleModal?.destroy();
     this.settleModal = undefined;
     this.lastWaveShown = -1;
+    this.wardText = undefined;
     this.ghost?.destroy();
     this.ghost = undefined;
     this.cellHighlight?.destroy();
@@ -261,7 +271,8 @@ export class BattleScene extends Phaser.Scene {
   /** 篱门小推车（一次性护盾，PvZ 参考）；消耗由 mower 事件驱动图像消失。 */
   private drawGates(): void {
     for (let r = 0; r < ROWS; r++) {
-      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_mower').setScale(3);
+      // 割草机：显示尺寸锁定（避免 setScale(3) 的 192px 压住第一列草坪），depth 1 保证不被单位盖住
+      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_mower').setDisplaySize(56, 56).setDepth(1);
     }
   }
 
@@ -274,6 +285,22 @@ export class BattleScene extends Phaser.Scene {
     // 左：光露资源徽记（图标 + 大数字）
     const badge = resourceBadge(this, 56, 54, 'icon_lightdew', String(this.bt.lightdew), { depth: zIndex.hud + 1 });
     this.sunText = badge.valueText;
+
+    // 左中：出战携带道具（M-INV）；荆棘护盾附倒计时
+    const carriedDef = this.carriedItem ? itemById(this.carriedItem.id) : undefined;
+    if (carriedDef) {
+      this.add.image(352, 54, `icon_${carriedDef.icon}`).setDisplaySize(36, 36).setDepth(zIndex.hud + 1);
+      this.add
+        .text(378, 40, carriedDef.name, { ...typography.body, color: C_CREAM })
+        .setOrigin(0, 0.5)
+        .setDepth(zIndex.hud + 1);
+      if (this.carriedItem?.effect.t === 'mowerWard') {
+        this.wardText = this.add
+          .text(378, 70, '', { ...typography.caption, color: C_GOLD })
+          .setOrigin(0, 0.5)
+          .setDepth(zIndex.hud + 1);
+      }
+    }
 
     // 中：波次文本 + 细进度条
     this.waveText = this.add
@@ -353,7 +380,10 @@ export class BattleScene extends Phaser.Scene {
 
   private mkCard(x: number, def: UnitArchetype, opts: { hand?: boolean; showCost?: boolean } = {}): CardRef {
     const card = seedCardBase(this, x, this.CARD_Y, CARD_W, CARD_H, { depth: 11 });
-    const img = this.add.image(CARD_W / 2, opts.showCost === false ? CARD_H / 2 : 52, `unit_${def.id}`).setScale(opts.showCost === false ? 2.1 : 1.7);
+    // 立绘尺寸用显示尺寸锁定：unit_ 纹理为 32×32×4=128px，setScale(1.7) 会放大到 217px 并溢出卡片
+    const img = this.add
+      .image(CARD_W / 2, opts.showCost === false ? CARD_H / 2 - 8 : 54, `unit_${def.id}`)
+      .setDisplaySize(opts.showCost === false ? 92 : 78, opts.showCost === false ? 92 : 78);
     card.add(img);
     let costText: Phaser.GameObjects.Text | undefined;
     if (opts.showCost !== false) {
@@ -383,7 +413,8 @@ export class BattleScene extends Phaser.Scene {
 
   private mkToolCard(x: number, icon: string, label: string, onClick: () => void): void {
     const card = seedCardBase(this, x, this.CARD_Y, CARD_W, CARD_H, { depth: 11 });
-    card.add(this.add.image(CARD_W / 2, CARD_H / 2 - 10, icon).setScale(3));
+    // 图标尺寸用显示尺寸锁定（icon_ 纹理为 16×16×4=64px，setScale(3) 会溢出卡片）
+    card.add(this.add.image(CARD_W / 2, CARD_H / 2 - 10, icon).setDisplaySize(76, 76));
     card.add(this.add.text(CARD_W / 2, CARD_H - 22, label, { ...typography.body, color: C_DARK }).setOrigin(0.5));
     this.cardParts.push(card);
     const hit = this.add.zone(x, this.CARD_Y, CARD_W, CARD_H).setOrigin(0, 0).setDepth(12).setInteractive({ useHandCursor: true });
@@ -430,7 +461,7 @@ export class BattleScene extends Phaser.Scene {
   private drawFoodCard(x: number): void {
     this.foodCardX = x;
     const card = seedCardBase(this, x, this.CARD_Y, CARD_W, CARD_H, { depth: 11 });
-    card.add(this.add.image(CARD_W / 2, CARD_H / 2 - 14, 'icon_energy').setScale(3));
+    card.add(this.add.image(CARD_W / 2, CARD_H / 2 - 14, 'icon_energy').setDisplaySize(76, 76));
     this.foodText = this.add
       .text(CARD_W / 2, CARD_H - 22, `×${this.bt.plantFood}`, { ...typography.body, color: C_DARK })
       .setOrigin(0.5);
@@ -574,6 +605,10 @@ export class BattleScene extends Phaser.Scene {
     this.syncConveyorHand();
     this.updateCards();
     this.sunText?.setText(String(this.bt.lightdew));
+    if (this.wardText) {
+      const left = Math.max(0, Math.ceil((this.bt.mowerWardUntil - this.bt.now) / 1000));
+      this.wardText.setText(left > 0 ? `护盾 ${left}s` : '护盾已失效');
+    }
     if (this.lastWaveShown !== this.bt.wave) {
       this.lastWaveShown = this.bt.wave;
       this.waveText?.setText(`第 ${this.bt.wave} / ${this.level.waves} 波`);
@@ -986,11 +1021,16 @@ export class BattleScene extends Phaser.Scene {
     this.persistProgress(3);
     this.cameras.main.flash(260, 250, 244, 190);
     this.settleModal?.destroy();
+    const lines = ['光露与奖励已入账'];
+    if (this.carriedItem?.effect.t === 'clearBonus') {
+      lines.push(`幸运四叶草生效 · 金币 ×${this.carriedItem.effect.coinMult} · 种子券 +${this.carriedItem.effect.bonusSeeds}`);
+    }
+    lines.push(`${this.level.id} · ${this.level.waves} 波`);
     this.settleModal = settlement(this, {
       win: true,
       title: '胜利！晨雾草原守住了',
       stars: 3,
-      lines: ['光露与奖励已入账', `${this.level.id} · ${this.level.waves} 波`],
+      lines,
       onContinue: () => this.scene.start('Map'),
     });
   }
@@ -1020,7 +1060,13 @@ export class BattleScene extends Phaser.Scene {
       for (const id of this.level.unlockUnits) {
         if (!save.progress.unlockedUnits.includes(id)) save.progress.unlockedUnits.push(id);
       }
-      const reward = levelClearReward({ level: this.level, stars, previousStars, totalStarsBefore });
+      const reward = levelClearReward({
+        level: this.level,
+        stars,
+        previousStars,
+        totalStarsBefore,
+        ...(this.carriedItem ? { carriedItem: this.carriedItem.effect } : {}),
+      });
       save.wallet.coins += reward.coins;
       save.wallet.diamonds += reward.diamonds;
       save.wallet.seeds += reward.seeds;

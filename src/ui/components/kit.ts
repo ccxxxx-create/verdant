@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../../data/pixels/palette.ts';
-import { typography, hexToInt, motion, FONT, semantic } from '../tokens.ts';
+import { typography, hexToInt, motion, FONT, semantic, zIndex, radius } from '../tokens.ts';
 
 /**
  * Hub/浅色场景统一组件库（M3B 界面统一 pass → M-UI 设计系统升级）：
@@ -38,6 +38,9 @@ export const KIT = {
   textDark: P.K ?? '#26402F',
   textSub: '#5E7A66',
   textBrown: P.e ?? '#8A5F3C',
+  // 禁用态（纸色系去饱和一档，与全站纸底世界同语言；勿用冷灰）
+  disabled: 0xD8CFB8,
+  disabledCss: '#D8CFB8',
   // 氛围（晨光光晕 / 飘浮光露）
   sunGlow: 0xffe9a8,
   sunCore: 0xfff3c4,
@@ -60,6 +63,13 @@ export const KIT = {
   dangerCss: semantic.danger,
   info: hexToInt(semantic.info),
   infoCss: semantic.info,
+  // 品质分级（M-INV 道具/抽卡共用）：普通=木色 / 稀有=紫 / 传说=金
+  rarityCommon: parseInt((P.n ?? '#C89A5E').replace('#', ''), 16),
+  rarityCommonCss: P.n ?? '#C89A5E',
+  rarityRare: hexToInt(P.P ?? '#9B7BF0'),
+  rarityRareCss: P.P ?? '#9B7BF0',
+  rarityLegendary: hexToInt(P.G ?? '#FFD34D'),
+  rarityLegendaryCss: P.G ?? '#FFD34D',
 } as const;
 
 /**
@@ -131,18 +141,32 @@ export function pixelPanel(
   y: number,
   w: number,
   h: number,
-  opts: { fill?: number; stroke?: number; depth?: number; shadow?: boolean; radius?: number } = {},
+  opts: {
+    fill?: number;
+    stroke?: number;
+    depth?: number;
+    shadow?: boolean;
+    radius?: number;
+    /** 顶部受光带（与 pixelButton / seedCardBase 同一"受光面"语言）；小面板可关。 */
+    highlight?: boolean;
+  } = {},
 ): Phaser.GameObjects.Container {
   const c = scene.add.container(x, y).setDepth(opts.depth ?? 2);
+  const r = opts.radius ?? radius.sm;
   const g = scene.add.graphics();
   if (opts.shadow !== false) {
     g.fillStyle(KIT.shadow, 0.35);
-    g.fillRoundedRect(0, 5, w, h, opts.radius ?? 6);
+    g.fillRoundedRect(0, 5, w, h, r);
   }
   g.fillStyle(opts.fill ?? KIT.paper, 0.97);
-  g.fillRoundedRect(0, 0, w, h, opts.radius ?? 6);
+  g.fillRoundedRect(0, 0, w, h, r);
+  if (opts.highlight !== false && h >= 40) {
+    // 受光面：高度随面板自适应并封顶，避免大面板出现"厚白条"
+    g.fillStyle(0xffffff, 0.2);
+    g.fillRoundedRect(4, 3, w - 8, Math.max(6, Math.min(20, h * 0.16)), Math.min(6, r));
+  }
   g.lineStyle(3, opts.stroke ?? KIT.outline, 1);
-  g.strokeRoundedRect(0, 0, w, h, opts.radius ?? 6);
+  g.strokeRoundedRect(0, 0, w, h, r);
   c.add(g);
   return c;
 }
@@ -170,7 +194,7 @@ export function pixelButton(
   const g = scene.add.graphics();
   g.fillStyle(KIT.shadow, enabled ? 0.35 : 0.2);
   g.fillRoundedRect(0, 5, w, h, 6);
-  g.fillStyle(enabled ? accent : 0xb3ad9c, 1);
+  g.fillStyle(enabled ? accent : KIT.disabled, 1);
   g.fillRoundedRect(0, 0, w, h, 6);
   if (enabled) {
     // 顶部高光带（受光面），商业按钮质感的核心一笔
@@ -191,7 +215,7 @@ export function pixelButton(
     .setOrigin(0.5);
   c.add(labelText);
   if (opts.sub) {
-    c.add(scene.add.text(w / 2, h / 2 + 22, opts.sub, { fontFamily: FONT, fontSize: '14px', color: KIT.textDark }).setOrigin(0.5).setAlpha(0.75));
+    c.add(scene.add.text(w / 2, h / 2 + 22, opts.sub, { ...typography.caption, color: KIT.textDark }).setOrigin(0.5).setAlpha(0.75));
   }
   const hit = scene.add.zone(x, y, w, h).setOrigin(0, 0).setDepth((opts.depth ?? 3) + 1).setInteractive({ useHandCursor: enabled });
   pressable(scene, hit, c, enabled);
@@ -201,6 +225,36 @@ export function pixelButton(
   }
   if (enabled && opts.onClick) hit.on('pointerup', opts.onClick);
   return { container: c, hit, labelText };
+}
+
+/** 悬停高亮：任意容器加"白光 16%"反馈（卡片类交互件复用，与 pixelButton 同一语言）。 */
+export function hoverable(scene: Phaser.Scene, hit: Phaser.GameObjects.Zone, target: Phaser.GameObjects.Container): void {
+  if (!MOTION_ENABLED) return;
+  const fx = scene.add.graphics();
+  fx.fillStyle(0xffffff, 0.16);
+  fx.fillRoundedRect(0, 0, target.width, target.height, 6);
+  fx.setAlpha(0);
+  target.add(fx);
+  hit.on('pointerover', () => scene.tweens.add({ targets: fx, alpha: 1, duration: motion.feedback }));
+  hit.on('pointerout', () => scene.tweens.add({ targets: fx, alpha: 0, duration: motion.feedback + 40 }));
+}
+
+/** 关闭钮（✕）：纸底圆钮 + 2px 45% 描边 + hover 高光；命中区 64×56 ≥ TOUCH_TARGET_MIN。 */
+export function closeButton(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  opts: { depth?: number; size?: number; onClick: () => void },
+): Phaser.GameObjects.Zone {
+  const size = opts.size ?? 48;
+  const depth = opts.depth ?? zIndex.content;
+  const p = pixelPanel(scene, x, y, size, size, { depth, radius: 10 });
+  p.add(scene.add.text(size / 2, size / 2, '✕', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: KIT.textDark }).setOrigin(0.5));
+  // 命中区比视觉件大一圈，保证触控热区 ≥48px（GDD §10.2）
+  const hit = scene.add.zone(x + size / 2 - 28, y + size / 2 - 28, 56, 56).setOrigin(0, 0).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+  hoverable(scene, hit, p);
+  hit.on('pointerup', opts.onClick);
+  return hit;
 }
 
 /** 按压反馈（game-feel-design：点击即响应，0.97 缩放 + 回弹；hit 与视觉件分离时绑 hit）。 */

@@ -1,8 +1,9 @@
 import type { EnemyArchetype, UnitArchetype } from '../schema/unit.ts';
 import type { LevelDef } from '../schema/level.ts';
 import type { Rng } from '../rng.ts';
+import type { ItemEffect } from '../../data/items.ts';
 
-/** 内核战斗配置：关卡 + 原型表 + 牌组 + 种子。 */
+/** 内核战斗配置：关卡 + 原型表 + 牌组 + 种子 + 出战携带道具。 */
 export interface BattleConfig {
   level: LevelDef;
   units: ReadonlyMap<string, UnitArchetype>;
@@ -10,6 +11,11 @@ export interface BattleConfig {
   /** 牌组（局前选卡结果；缺省时内核用全 owned 前 8）。 */
   deck: readonly string[];
   seed?: number;
+  /**
+   * 出战前携带的道具效果（M-INV；DeckPicker 注入，缺省=不携带）。
+   * 纪律：**只影响 createBattle 的初始状态**，不新增 sim 命令、不改事件契约。
+   */
+  carriedItem?: { id: string; effect: ItemEffect };
 }
 
 export type AttackKind = 'single' | 'multi' | 'aoe' | 'melee' | 'lobbed' | 'trigger';
@@ -140,6 +146,10 @@ export interface BattleState {
   projectiles: ProjInst[];
   drops: DropInst[];
   mowers: boolean[];
+  /** 荆棘护盾：限时免消耗割草机的截止时刻（ms；0=未启用）。由 createBattle 写入。 */
+  mowerWardUntil: number;
+  /** 荆棘护盾已用掉免费拦截的行（每行各一次）。 */
+  mowerWardUsed: boolean[];
   wave: number;
   waveTimer: number;
   /** 本波已进行 ms（清场加速的最短经过时间判定）。 */

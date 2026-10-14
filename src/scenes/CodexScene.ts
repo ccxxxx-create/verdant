@@ -7,7 +7,7 @@ import { codexTerrainRules, codexCounters } from '../data/codex/terrain.ts';
 import type { UnitArchetype, EnemyArchetype } from '../core/schema/unit.ts';
 import { palette, worldPalette, typography, radius, hexToInt, zIndex } from '../ui/tokens.ts';
 import { CARD_W, CARD_H, createUnitCard, createEnemyCard, ARMOR_LABEL, ARMOR_COLOR, ROLE_LABEL, ROLE_COLOR } from '../ui/components/cards.ts';
-import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, drawAmbient, KIT, chip, MOTION_ENABLED } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelPanel, sceneHeader, sceneEnter, drawAmbient, KIT, chip, closeButton, MOTION_ENABLED } from '../ui/components/kit.ts';
 
 type TabId = 'units' | 'enemies' | 'worlds' | 'terrain';
 
@@ -66,7 +66,9 @@ export class CodexScene extends Phaser.Scene {
     const { width } = this.scale.gameSize;
     drawPixelBackdrop(this);
     drawAmbient(this, { motes: 4, dim: true });
-    sceneHeader(this, '图鉴', { subtitle: 'VERDANT CODEX · 收录 51 生灵 / 44 怪兽' });
+    sceneHeader(this, '图鉴', {
+      subtitle: `VERDANT CODEX · 首发已收录 ${allUnits.length} 生灵 / ${allEnemies.length} 怪兽（规划 51 / 44）`,
+    });
     this.drawTabs(width);
     this.renderTab(width);
     this.bindScroll();
@@ -315,14 +317,8 @@ export class CodexScene extends Phaser.Scene {
     pg.strokeRoundedRect(px, py, pw, ph, 6);
     panel.add(pg);
     // 关闭按钮（视觉）
-    const closeBtn = this.add.container(px + pw - 96, py + 24);
-    const cg = this.add.graphics();
-    cg.fillStyle(hexToInt(palette.bgDeep), 0.1);
-    cg.fillRoundedRect(0, 0, 64, 48, radius.md);
-    closeBtn.add(cg);
-    closeBtn.add(this.add.text(32, 24, '✕', { ...typography.heading, color: palette.bgDeep }).setOrigin(0.5));
-    // 命中区场景级（容器交互在 depth>0 不可靠）
-    const closeHit = this.add.zone(px + pw - 96, py + 24, 64, 48).setOrigin(0, 0).setDepth(zIndex.dialog + 1).setInteractive({ useHandCursor: true });
+    // 关闭按钮（统一走 kit.closeButton；命中区 56×56 达 TOUCH_TARGET_MIN）
+    const closeHit = closeButton(this, px + pw - 56, py + 24, { depth: zIndex.dialog + 1, onClick: () => close() });
     // 统一关闭路径（✕ 与点遮罩共用；closeHit 为场景级，必须一并销毁防泄漏——审查 P1-1）
     const close = (): void => {
       this.tweens.killAll(); // 详情立绘 idleBreathe repeat:-1 随弹层终止（P2-9 泄漏修复）
@@ -332,7 +328,6 @@ export class CodexScene extends Phaser.Scene {
     };
     closeHit.on('pointerup', close);
     dim.on('pointerup', close);
-    panel.add(closeBtn);
     return { dim, panel };
   }
 

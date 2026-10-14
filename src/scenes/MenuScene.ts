@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
-import { palette, typography, motion, FONT } from '../ui/tokens.ts';
+import { palette, typography, motion, zIndex } from '../ui/tokens.ts';
 import { readSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
 import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
 import { ensurePixelTextures } from './BattleScene.ts';
-import { drawPixelBackdrop, pixelPanel, sceneEnter, breathe, pressable, KIT, MOTION_ENABLED } from '../ui/components/kit.ts';
+import { drawPixelBackdrop, pixelPanel, progressBar, sceneEnter, breathe, pressable, hoverable, KIT, MOTION_ENABLED } from '../ui/components/kit.ts';
 import { modal, type ModalHandle } from '../ui/components/overlay.ts';
 import { setMotionPreference } from '../ui/settings.ts';
+import { openRedeemDialog } from '../ui/redeem.ts';
 import { ALL_LEVELS } from '../data/levels/index.ts';
 
 /** 总单位数（图鉴完成度分母；分母取 GDD 首发 51）。 */
@@ -24,6 +25,8 @@ export class MenuScene extends Phaser.Scene {
   private hintTimer?: Phaser.Time.TimerEvent;
   private settingsModal?: ModalHandle;
   private save?: SaveGame;
+  /** 右上钱包条的数值文本引用（兑换码发放后原地刷新，避免整场景重启）。 */
+  private walletValueTexts: { key: string; text: Phaser.GameObjects.Text }[] = [];
 
   constructor() {
     super('Menu');
@@ -37,6 +40,7 @@ export class MenuScene extends Phaser.Scene {
     this.hintTimer = undefined;
     this.settingsModal?.destroy();
     this.settingsModal = undefined;
+    this.walletValueTexts = [];
 
     for (const [name, sprite] of Object.entries(pixelIcons)) bakePixelTexture(this, `icon_${name}`, sprite, 4);
     ensurePixelTextures(this);
@@ -48,6 +52,7 @@ export class MenuScene extends Phaser.Scene {
     this.drawPrimaryCta();
     this.drawSecondaryRow();
     this.drawWalletChip(width);
+    this.drawGearButton(width);
     this.drawCornerButtons(width, height);
     sceneEnter(this);
   }
@@ -89,11 +94,11 @@ export class MenuScene extends Phaser.Scene {
   private drawLogo(): void {
     const c = this.add.container(96, 66).setDepth(3);
     // 投影层
-    c.add(this.add.text(4, 6, '长 夏', { fontFamily: FONT, fontSize: '104px', fontStyle: 'bold', color: KIT.shadowCss }).setOrigin(0, 0.5).setAlpha(0.35));
+    c.add(this.add.text(4, 6, '长 夏', { ...typography.brand, color: KIT.shadowCss }).setOrigin(0, 0.5).setAlpha(0.35));
     // 主字（金 + 深描边）
     c.add(
       this.add
-        .text(0, 0, '长 夏', { fontFamily: FONT, fontSize: '104px', fontStyle: 'bold', color: KIT.accentCss })
+        .text(0, 0, '长 夏', { ...typography.brand, color: KIT.accentCss })
         .setOrigin(0, 0.5)
         .setStroke(KIT.outlineCss, 10),
     );
@@ -170,34 +175,32 @@ export class MenuScene extends Phaser.Scene {
     g.lineStyle(4, KIT.outline, 1);
     g.strokeRoundedRect(0, 0, w, h, 8);
     c.add(g);
+    // 一级动作升到 display(48)：此前与页标题同号(34)，主次被压平
     c.add(
       this.add
-        .text(w / 2, 42, label, { ...typography.title, color: KIT.onAccent })
+        .text(w / 2, 46, label, { ...typography.display, color: KIT.onAccent })
         .setOrigin(0.5)
-        .setStroke(KIT.outlineCss, 7),
+        .setStroke(KIT.outlineCss, 8),
     );
-    c.add(this.add.text(w / 2, 92, sub, { ...typography.caption, color: KIT.onAccentSoft }).setOrigin(0.5));
+    c.add(this.add.text(w / 2, 100, sub, { ...typography.body, color: KIT.onAccentSoft }).setOrigin(0.5));
     if (MOTION_ENABLED) this.tweens.add({ targets: c, scale: { from: 1, to: 1.015 }, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     const hit = this.add.zone(x, y, w, h).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
     pressable(this, hit, c, true);
     hit.on('pointerup', () => this.scene.start('Map'));
 
-    // CTA 侧翼小进度条
+    // CTA 侧翼小进度条（统一走 kit.progressBar）
     const bw = 470;
-    const pb = this.add.graphics().setDepth(3);
     const progress = Math.min(1, cleared / Math.max(1, ALL_LEVELS.length));
-    pb.fillStyle(KIT.outline, 0.18);
-    pb.fillRoundedRect(x, y + h + 12, bw, 10, 5);
-    pb.fillStyle(KIT.goldMid, 1);
-    pb.fillRoundedRect(x, y + h + 12, Math.max(10, bw * progress), 10, 5);
+    progressBar(this, x, y + h + 12, bw, 10, progress, { fill: KIT.goldMid, depth: 3 });
   }
 
   // —— 次级功能小卡（CTA 下方三卡） ——
   private drawSecondaryRow(): void {
-    const modes: { label: string; icon: string; color: number; action: 'codex' | 'shop' | 'draw' }[] = [
+    const modes: { label: string; icon: string; color: number; action: 'codex' | 'shop' | 'draw' | 'inventory' }[] = [
       { label: '图鉴', icon: 'book', color: KIT.goldMid, action: 'codex' },
       { label: '商店', icon: 'coin', color: KIT.accentBlue, action: 'shop' },
       { label: '抽奖', icon: 'seed', color: KIT.diamond, action: 'draw' },
+      { label: '背包', icon: 'bag', color: KIT.success, action: 'inventory' },
     ];
     const cw = 148;
     const ch = 148;
@@ -210,10 +213,12 @@ export class MenuScene extends Phaser.Scene {
       card.add(this.add.text(cw / 2, 112, m.label, { ...typography.heading, color: KIT.textDark }).setOrigin(0.5));
       const hit = this.add.zone(x, y, cw, ch).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
       pressable(this, hit, card, true);
+      hoverable(this, hit, card); // 次级卡此前无悬停反馈
       hit.on('pointerup', () => {
         if (m.action === 'codex') this.scene.start('Codex');
         else if (m.action === 'shop') this.scene.start('Shop');
-        else this.scene.start('Draw');
+        else if (m.action === 'draw') this.scene.start('Draw');
+        else this.scene.start('Inventory');
       });
     });
   }
@@ -243,18 +248,40 @@ export class MenuScene extends Phaser.Scene {
     ];
     wallet.forEach(([icon, key]) => {
       this.add.image(cx, cy, icon).setDisplaySize(26, 26).setDepth(4);
-      this.add
+      const valueText = this.add
         .text(cx + 20, cy, `${save?.wallet[key as keyof typeof save.wallet] ?? 0}`, { ...typography.body, fontStyle: 'bold', color: KIT.textDark })
         .setOrigin(0, 0.5)
         .setDepth(4);
+      this.walletValueTexts.push({ key, text: valueText });
       cx += 104;
     });
   }
 
-  // —— 右下角工具钮（设置/音效/关于） ——
+  /** 兑换/购买后原地刷新钱包数值（避免整场景重启）。 */
+  private refreshWallet(): void {
+    const wallet = this.save?.wallet;
+    for (const { key, text } of this.walletValueTexts) {
+      text.setText(`${wallet ? (wallet[key as keyof typeof wallet] ?? 0) : 0}`);
+    }
+  }
+
+  // —— 右上顶栏齿轮（设置入口；标准商业手游形态，热区 108×64 ≥ 48px） ——
+  private drawGearButton(width: number): void {
+    const w = 108;
+    const h = 64;
+    const x = width - 620 - 60 - w - 12;
+    const y = 44;
+    const panel = pixelPanel(this, x, y, w, h, { depth: 3, radius: 4 });
+    panel.add(this.add.image(34, h / 2, 'icon_settings').setDisplaySize(30, 30));
+    panel.add(this.add.text(62, h / 2, '设置', { ...typography.body, fontStyle: 'bold', color: KIT.textDark }).setOrigin(0, 0.5));
+    const hit = this.add.zone(x, y, w, h).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
+    pressable(this, hit, panel, true);
+    hit.on('pointerup', () => this.openSettings());
+  }
+
+  // —— 右下角工具钮（音效/关于；设置已移到右上顶栏齿轮） ——
   private drawCornerButtons(width: number, height: number): void {
-    const items: { icon: string; msg: string; action?: 'settings' }[] = [
-      { icon: 'settings', msg: '设置', action: 'settings' },
+    const items: { icon: string; msg: string }[] = [
       { icon: 'sound', msg: 'WebAudio 程序化音效在 M6 落地' },
       { icon: 'info', msg: 'Verdant《长夏》· 文档见 docs/GDD.md' },
     ];
@@ -268,52 +295,59 @@ export class MenuScene extends Phaser.Scene {
       panel.add(this.add.image(size / 2, size / 2, `icon_${it.icon}`).setDisplaySize(30, 30));
       const hit = this.add.zone(x, y, size, size).setOrigin(0, 0).setDepth(4).setInteractive({ useHandCursor: true });
       pressable(this, hit, panel, true);
-      hit.on('pointerup', () => {
-        if (it.action === 'settings') this.openSettings();
-        else this.showHint(x + size / 2, y - 24, it.msg);
-      });
+      hit.on('pointerup', () => this.showHint(x + size / 2, y - 24, it.msg));
     });
   }
 
-  /** 设置弹层（当前承载"减弱动态"可访问性开关）。 */
+  /** 设置面板（多分区：表现与可访问性 / 兑换码 / 关闭）。 */
   private openSettings(): void {
     const save = this.save;
     if (!save) return;
-    const rebuild = (): void => {
-      this.settingsModal?.destroy();
-      this.settingsModal = modal(this, {
-        title: '设置',
-        subtitle: '长夏 · 表现与可访问性',
-        width: 600,
-        height: 320,
-        buttons: [
-          {
-            label: `减弱动态：${save.settings.motion ? '开' : '关'}`,
-            sub: '关闭后不再播放常驻循环动效与氛围粒子',
-            onClick: () => {
-              setMotionPreference(save, !save.settings.motion);
-              // 立即生效：重启主界面，让常驻循环动效按新开关重建（审查 P1-2）
-              this.tweens.killAll();
-              this.scene.restart();
-            },
+    this.settingsModal?.destroy();
+    this.settingsModal = modal(this, {
+      title: '设置',
+      subtitle: '长夏 · 表现与可访问性 · 文档见 docs/GDD.md',
+      width: 640,
+      height: 400,
+      buttons: [
+        {
+          label: `减弱动态：${save.settings.motion ? '开' : '关'}`,
+          sub: '关闭后不再播放常驻循环动效与氛围粒子',
+          onClick: () => {
+            setMotionPreference(save, !save.settings.motion);
+            // 立即生效：重启主界面，让常驻循环动效按新开关重建（审查 P1-2）
+            this.tweens.killAll();
+            this.scene.restart();
           },
-          {
-            label: '关闭',
-            onClick: () => {
-              this.settingsModal?.destroy();
-              this.settingsModal = undefined;
-            },
+        },
+        {
+          label: '兑换码',
+          sub: '输入兑换码领取金币 / 钻石 / 道具',
+          accent: KIT.gold,
+          onClick: () => {
+            openRedeemDialog(this, save, { onGranted: () => this.refreshWallet() });
           },
-        ],
-      });
-    };
-    rebuild();
+        },
+        {
+          label: '关闭',
+          onClick: () => {
+            this.settingsModal?.destroy();
+            this.settingsModal = undefined;
+          },
+        },
+      ],
+    });
   }
 
   private showHint(x: number, y: number, msg: string): void {
     this.hintTimer?.remove();
     if (!this.hint) {
-      this.hint = this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '14px', color: palette.bgDeep }).setOrigin(0.5).setAlpha(0);
+      // 必须压在内容层之上，否则提示会被 depth 3 的立绘/卡片盖住
+      this.hint = this.add
+        .text(0, 0, '', { ...typography.caption, color: palette.bgDeep })
+        .setOrigin(0.5)
+        .setDepth(zIndex.overlay + 2)
+        .setAlpha(0);
     }
     this.hint.setPosition(x, y).setText(msg).setAlpha(0);
     this.tweens.add({ targets: this.hint, alpha: 0.75, duration: motion.transition });
