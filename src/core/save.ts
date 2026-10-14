@@ -8,6 +8,11 @@ export interface SaveStorage {
 
 const SAVE_KEY = 'verdant.save.v1';
 
+/** 是否存在真实存档（更新公告用：无档新玩家不弹公告；readSave 的默认档回退使 readSave 本身无法区分）。 */
+export function hasSave(storage: SaveStorage): boolean {
+  return storage.getItem(SAVE_KEY) !== null;
+}
+
 /**
  * 读取存档：解析失败不毁档，退回默认档并回调错误（GDD §9.2 可读报错，不黑屏）。
  * 不依赖 Phaser：核心逻辑在 node 测试环境可跑（DEV-PLAN §4）。

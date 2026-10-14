@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readSave, writeSave, type SaveStorage } from '../src/core/save';
+import { hasSave, readSave, writeSave, type SaveStorage } from '../src/core/save';
 import { SaveV6, defaultSave, migrate, CURRENT_SCHEMA_VERSION } from '../src/core/schema/save';
+import { GAME_VERSION } from '../src/core/version';
+import { CURRENT_NOTE, PATCH_NOTES } from '../src/data/patchNotes';
 
 function memoryStore(initial?: string): SaveStorage & { data: Record<string, string> } {
   const data: Record<string, string> = {};
@@ -120,6 +122,12 @@ describe('migration chain', () => {
     expect(result.stats.wins).toBe(3);
   });
 
+  it('legacy v6 save without patchSeen migrates to empty string (patch dialog due)', () => {
+    const v6 = { ...defaultSave(), patchSeen: undefined };
+    const result = SaveV6.parse(migrate(v6));
+    expect(result.patchSeen).toBe('');
+  });
+
   it('v6 inventory keeps positive counts and drops invalid entries', () => {
     const raw = {
       ...defaultSave(),
@@ -135,5 +143,38 @@ describe('migration chain', () => {
 
   it('missing schemaVersion is rejected', () => {
     expect(() => migrate({})).toThrow(/schemaVersion/);
+  });
+});
+
+describe('patch notes gate', () => {
+  it('new save marks current version as seen (fresh players never see the dialog)', () => {
+    expect(defaultSave().patchSeen).toBe(GAME_VERSION);
+  });
+
+  it('GAME_VERSION stays in sync with the latest patch note (release discipline)', () => {
+    expect(GAME_VERSION).toBe(CURRENT_NOTE.version);
+    expect(CURRENT_NOTE.lines.length).toBeGreaterThan(0);
+    for (const note of PATCH_NOTES) {
+      expect(note.lines.length, `patch ${note.version} has empty lines`).toBeGreaterThan(0);
+    }
+  });
+
+  it('patchSeen roundtrips through write/read', () => {
+    const store = memoryStore();
+    const save = { ...defaultSave(), patchSeen: '2026.09.01' };
+    writeSave(store, save);
+    expect(readSave(store).patchSeen).toBe('2026.09.01');
+  });
+
+  it('hasSave distinguishes fresh players from upgrading ones', () => {
+    const empty = memoryStore();
+    expect(hasSave(empty)).toBe(false);
+    writeSave(empty, defaultSave());
+    expect(hasSave(empty)).toBe(true);
+  });
+
+  it('upgraded legacy save (patchSeen="") differs from current version', () => {
+    const upgraded = SaveV6.parse(migrate({ ...defaultSave(), patchSeen: undefined }));
+    expect(upgraded.patchSeen).not.toBe(GAME_VERSION);
   });
 });

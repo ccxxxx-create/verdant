@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { palette, typography, motion, zIndex } from '../ui/tokens.ts';
-import { readSave } from '../core/save.ts';
+import { readSave, hasSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
+import { GAME_VERSION } from '../core/version.ts';
+import { CURRENT_NOTE } from '../data/patchNotes.ts';
 import { pixelIcons } from '../data/pixels/icons.ts';
 import { bakePixelTexture } from '../render/pixelTexture.ts';
 import { ensurePixelTextures } from './BattleScene.ts';
@@ -24,6 +26,7 @@ export class MenuScene extends Phaser.Scene {
   private hint?: Phaser.GameObjects.Text;
   private hintTimer?: Phaser.Time.TimerEvent;
   private settingsModal?: ModalHandle;
+  private patchModal?: ModalHandle;
   private save?: SaveGame;
   /** 右上钱包条的数值文本引用（兑换码发放后原地刷新，避免整场景重启）。 */
   private walletValueTexts: { key: string; text: Phaser.GameObjects.Text }[] = [];
@@ -40,6 +43,8 @@ export class MenuScene extends Phaser.Scene {
     this.hintTimer = undefined;
     this.settingsModal?.destroy();
     this.settingsModal = undefined;
+    this.patchModal?.destroy();
+    this.patchModal = undefined;
     this.walletValueTexts = [];
 
     for (const [name, sprite] of Object.entries(pixelIcons)) bakePixelTexture(this, `icon_${name}`, sprite, 4);
@@ -54,7 +59,60 @@ export class MenuScene extends Phaser.Scene {
     this.drawWalletChip(width);
     this.drawGearButton(width);
     this.drawCornerButtons(width, height);
+    this.maybeShowPatchNotes();
     sceneEnter(this);
+  }
+
+  /**
+   * 更新公告（用户拍板 2026-10-15：仅升级玩家弹一次；新档 defaultSave 已带当前版本故不弹）。
+   * 判据：有真实旧档 且 patchSeen ≠ 当前版本。确认后写回存档，同版本不再弹。
+   */
+  private maybeShowPatchNotes(): void {
+    const save = this.save;
+    if (!save) return;
+    if (!hasSave(window.localStorage)) return;
+    if (save.patchSeen === GAME_VERSION) return;
+
+    const note = CURRENT_NOTE;
+    const { width: W, height: H } = this.scale.gameSize;
+    const pw = 640;
+    const ph = 470;
+    // py 与 modal() 内部同法计算（面板垂直位置），正文文本水平居中故无需 px
+    const py = Math.round((H - ph) / 2);
+
+    this.patchModal = modal(this, {
+      title: `更新公告 · v${note.version}`,
+      subtitle: note.date,
+      width: pw,
+      height: ph,
+      buttons: [
+        {
+          label: '知道了',
+          accent: KIT.woodLight,
+          onClick: () => {
+            save.patchSeen = GAME_VERSION;
+            writeSave(window.localStorage, save);
+            this.patchModal?.destroy();
+            this.patchModal = undefined;
+          },
+        },
+      ],
+    });
+
+    // modal 无正文区，仿 settlement 在面板上补条目文本（坐标须与 modal 的 px/py 同法计算）
+    const extra: Phaser.GameObjects.GameObject[] = note.lines.map((line, i) =>
+      this.add
+        .text(W / 2, py + 146 + i * 34, line, { ...typography.body, color: KIT.textDark })
+        .setOrigin(0.5)
+        .setDepth(zIndex.dialog + 2),
+    );
+    const base = this.patchModal;
+    this.patchModal = {
+      destroy: () => {
+        for (const e of extra) e.destroy();
+        base?.destroy();
+      },
+    };
   }
 
   // —— 氛围：左上晨光光晕 + 飘浮光露粒子 ——

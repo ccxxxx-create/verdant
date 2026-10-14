@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { enemyPoints } from './unit';
+import { GAME_VERSION } from '../version.ts';
 
 /**
  * 存档 schema v6（M-INV：新增 inventory 道具持有 + stats.redeemCount 兑换计数；v5 = 减弱动态开关）。
@@ -8,6 +9,8 @@ import { enemyPoints } from './unit';
 export const SaveV6 = z.strictObject({
   schemaVersion: z.literal(6),
   updatedAt: z.string(),
+  /** 已读更新公告的版本号（更新公告机制 2026-10-15）：''=旧档升级上来尚未读过；新档直接取 GAME_VERSION（新玩家不弹）。 */
+  patchSeen: z.string(),
   progress: z.strictObject({
     clearedLevels: z.array(z.string()),
     stars: z.record(z.string(), z.number().int().min(0).max(3)),
@@ -54,6 +57,7 @@ export function defaultSave(): SaveGame {
   return {
     schemaVersion: 6,
     updatedAt: new Date(0).toISOString(),
+    patchSeen: GAME_VERSION,
     progress: {
       clearedLevels: [],
       stars: {},
@@ -174,6 +178,8 @@ function shapeCurrent(v: Unknown): Unknown {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     updatedAt: typeof v['updatedAt'] === 'string' ? v['updatedAt'] : new Date(0).toISOString(),
+    // 旧档无此字段 → ''（视作"升级上来尚未读过公告"，下次启动弹一次）；新档由 defaultSave 直接带 GAME_VERSION
+    patchSeen: typeof v['patchSeen'] === 'string' ? v['patchSeen'] : '',
     progress: {
       clearedLevels: strArr(p['clearedLevels']),
       stars,
