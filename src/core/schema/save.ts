@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { enemyPoints } from './unit';
-import { GAME_VERSION } from '../version.ts';
 
 /**
  * 存档 schema v6（M-INV：新增 inventory 道具持有 + stats.redeemCount 兑换计数；v5 = 减弱动态开关）。
@@ -9,7 +8,7 @@ import { GAME_VERSION } from '../version.ts';
 export const SaveV6 = z.strictObject({
   schemaVersion: z.literal(6),
   updatedAt: z.string(),
-  /** 已读更新公告的版本号（更新公告机制 2026-10-15）：''=旧档升级上来尚未读过；新档直接取 GAME_VERSION（新玩家不弹）。 */
+  /** 已读更新公告的版本号（更新公告机制 2026-10-15）：''=尚未读过当前版本公告（新档与升级档同权，用户拍板：每次更新都要有感）；确认后由 MenuScene 写回 GAME_VERSION。 */
   patchSeen: z.string(),
   progress: z.strictObject({
     clearedLevels: z.array(z.string()),
@@ -57,7 +56,7 @@ export function defaultSave(): SaveGame {
   return {
     schemaVersion: 6,
     updatedAt: new Date(0).toISOString(),
-    patchSeen: GAME_VERSION,
+    patchSeen: '', // 新玩家首启也弹一次公告（用户拍板 2026-10-15 修订：更新要对所有玩家可见）
     progress: {
       clearedLevels: [],
       stars: {},

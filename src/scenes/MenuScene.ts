@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { palette, typography, motion, zIndex } from '../ui/tokens.ts';
-import { readSave, hasSave, writeSave } from '../core/save.ts';
+import { readSave, writeSave } from '../core/save.ts';
 import type { SaveGame } from '../core/schema/save.ts';
 import { GAME_VERSION } from '../core/version.ts';
 import { CURRENT_NOTE } from '../data/patchNotes.ts';
@@ -64,13 +64,12 @@ export class MenuScene extends Phaser.Scene {
   }
 
   /**
-   * 更新公告（用户拍板 2026-10-15：仅升级玩家弹一次；新档 defaultSave 已带当前版本故不弹）。
-   * 判据：有真实旧档 且 patchSeen ≠ 当前版本。确认后写回存档，同版本不再弹。
+   * 更新公告（用户拍板 2026-10-15 修订：所有玩家每次更新都弹一次，含首启新玩家）。
+   * 判据：patchSeen ≠ GAME_VERSION（新档与升级档同为 ''）。确认后写回存档，同版本不再弹。
    */
   private maybeShowPatchNotes(): void {
     const save = this.save;
     if (!save) return;
-    if (!hasSave(window.localStorage)) return;
     if (save.patchSeen === GAME_VERSION) return;
 
     const note = CURRENT_NOTE;

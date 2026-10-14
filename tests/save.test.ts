@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasSave, readSave, writeSave, type SaveStorage } from '../src/core/save';
+import { readSave, writeSave, type SaveStorage } from '../src/core/save';
 import { SaveV6, defaultSave, migrate, CURRENT_SCHEMA_VERSION } from '../src/core/schema/save';
 import { GAME_VERSION } from '../src/core/version';
 import { CURRENT_NOTE, PATCH_NOTES } from '../src/data/patchNotes';
@@ -147,8 +147,8 @@ describe('migration chain', () => {
 });
 
 describe('patch notes gate', () => {
-  it('new save marks current version as seen (fresh players never see the dialog)', () => {
-    expect(defaultSave().patchSeen).toBe(GAME_VERSION);
+  it('new save has not seen the current version (patch dialog due, all players)', () => {
+    expect(defaultSave().patchSeen).toBe('');
   });
 
   it('GAME_VERSION stays in sync with the latest patch note (release discipline)', () => {
@@ -166,15 +166,10 @@ describe('patch notes gate', () => {
     expect(readSave(store).patchSeen).toBe('2026.09.01');
   });
 
-  it('hasSave distinguishes fresh players from upgrading ones', () => {
-    const empty = memoryStore();
-    expect(hasSave(empty)).toBe(false);
-    writeSave(empty, defaultSave());
-    expect(hasSave(empty)).toBe(true);
-  });
-
-  it('upgraded legacy save (patchSeen="") differs from current version', () => {
+  it('dialogue condition holds for both fresh and upgraded saves', () => {
+    const fresh = defaultSave();
     const upgraded = SaveV6.parse(migrate({ ...defaultSave(), patchSeen: undefined }));
+    expect(fresh.patchSeen).not.toBe(GAME_VERSION);
     expect(upgraded.patchSeen).not.toBe(GAME_VERSION);
   });
 });
