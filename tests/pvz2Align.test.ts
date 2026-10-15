@@ -204,7 +204,10 @@ describe('PvZ2 植物等级曲线（Level 1~10）', () => {
 describe('PvZ2 差距表自洽', () => {
   it('每条差距都能追溯到参考表或显式标注 no-counterpart', () => {
     for (const row of ALL_ALIGNMENT) {
-      if (row.status === 'no-counterpart') expect(row.pvz2Id).toBeNull();
+      if (row.status === 'no-counterpart' && row.pvz2Id !== null) {
+        // 挂参照行的 no-counterpart：必须说明机制不同/自拟（防"半对齐"混淆口径）
+        expect(row.delta, `${row.repoId} 挂参照行须标注机制`).toMatch(/机制不同|自拟/);
+      }
       expect(row.delta.length, `${row.repoId} delta 不能为空`).toBeGreaterThan(0);
     }
   });

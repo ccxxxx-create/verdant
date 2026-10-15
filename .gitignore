@@ -7,3 +7,5 @@ coverage/
 .mimosa/
 _review/
 .codebuddy/
+
+.zcode/

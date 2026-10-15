@@ -116,7 +116,7 @@ describe('M3A battle kernel: wave pacing (PvZ2 口径)', () => {
   });
 
   it('waveBudget：teach 缩放 0.35 + 终波 ×2.5', () => {
-    expect(waveBudget(lv, 1)).toBe(5); // round(10 × 1.3 × 0.35) = round(4.55)；base 由 PvZ2 重锚后扫荡校准
+    expect(waveBudget(lv, 1)).toBe(4); // round(8 × 1.3 × 0.35) = round(3.64)；base 8 = PvZ2 速度对齐后重校（对冲僵尸提速）
     expect(waveBudget(lv, lv.waves)).toBeGreaterThan(waveBudget(lv, 1) * 2);
   });
 
@@ -151,7 +151,7 @@ describe('M3A battle kernel: traits', () => {
     const hp0 = e.hp;
     let shieldSeen = false;
     for (let i = 0; i < 60; i++) {
-      step(state, SIM_DT_MS); // 3s 内豌豆必然首发（intervalMs 1430）+ 弹飞行 ~1.2s
+      step(state, SIM_DT_MS); // 3s 内豌豆必然首发（intervalMs 1350）+ 弹飞行 ~1.2s
       if (e.shield < SHIELD_HP) shieldSeen = true;
       if (shieldSeen) break;
     }
@@ -173,7 +173,7 @@ describe('M3A battle kernel: traits', () => {
     state.plantFood = 1;
     expect(cmdUsePlantFoodOnUnit(state, u.uid)).toBe(true);
     expect(state.plantFood).toBe(0);
-    for (let i = 0; i < 80 && u.pendingShots.length === 0; i++) step(state, SIM_DT_MS); // 首攻 tick（interval 1430ms 内）
+    for (let i = 0; i < 80 && u.pendingShots.length === 0; i++) step(state, SIM_DT_MS); // 首攻 tick（interval 1350ms 内）
     expect(u.pendingShots.length).toBeGreaterThan(0);
     expect(u.pendingShots[0]?.damage).toBe((u.def.attack?.damage ?? 0) * 2); // 强化 ×2
   });
@@ -380,12 +380,13 @@ describe('lobbed same-row & dandelion homing（用户反馈 2026-10-15）', () =
     expect(state.projectiles.some((p) => p.pid === homing.pid)).toBe(false);
   });
 
-  it('蒲公英数值：30 伤 / 1500ms 间隔（珍惜全屏输出）', () => {
+  it('蒲公英数值：50 伤 / 1900ms 间隔 / 275 阳光 / 15s 充能（PvZ2 同名全对齐）', () => {
     const def = REG.unitById.get('dandelion');
     if (!def) throw new Error('dandelion missing from registry');
     expect(def.attack?.kind).toBe('homing');
-    expect(def.attack?.damage).toBe(30);
-    expect(def.attack?.intervalMs).toBe(1500);
-    expect(def.cost).toBe(25);
+    expect(def.attack?.damage).toBe(50);
+    expect(def.attack?.intervalMs).toBe(1900);
+    expect(def.cost).toBe(275);
+    expect(def.cooldownMs).toBe(15000);
   });
 });

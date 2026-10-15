@@ -83,16 +83,16 @@ function balanceRows() {
   const rows = [
     ['护甲减伤', `布 ${ARMOR_MULT.cloth} / 皮 ${ARMOR_MULT.hide} / 壳 ${ARMOR_MULT.shell} / 铁 ${ARMOR_MULT.iron}`],
     ['首波等待', `teach ${WAVE_PACING.firstWave.teach}s / 普通 ${WAVE_PACING.firstWave.normal}s`],
-    ['波间隔', `teach ${WAVE_PACING.betweenWaves.teach}s / 普通 ${WAVE_PACING.betweenWaves.normal}s`],
+    ['波间隔', `${WAVE_PACING.betweenWaves.base}+rand(0~${WAVE_PACING.betweenWaves.range})s（PvZ2 精确值待查证，挂账）`],
     ['波内出生间隔', `teach ${WAVE_PACING.spawnInterval.teach}s / 普通 ${WAVE_PACING.spawnInterval.normal}s`],
     ['波预算', `round(${WAVE_PACING.base} × (1 + w×${WAVE_PACING.growth}) × 模板缩放 × 终波×${WAVE_PACING.finalWaveMult})`],
     ['模板缩放', `teach ${WAVE_PACING.scale.teach} / 普通 ${WAVE_PACING.scale.normal}`],
     ['天空阳光', `首枚 ${SKY_SUN.firstS}s，之后 ${SKY_SUN.intervalMinS}~${SKY_SUN.intervalMaxS}s 一枚，值 ${SKY_SUN.value}，停留 ${SKY_SUN.restS}s`],
-    ['产出节奏', '向日葵系 25/24s（PvZ1 口径）'],
-    ['攻击节奏', '豌豆系 20 伤 / 1.43s（PvZ1 口径）'],
-    ['敌人速度', '普通 0.21 格/秒 ≈ 4.7s/格（PvZ1 口径）'],
-    ['起步光露', '50（PvZ1 口径）'],
-    ['冷却表', '豌豆系 7.5s / 坚果 30s / 樱桃 50s（PvZ1 口径）'],
+    ['产出节奏', '向日葵系 50 露 / 24s（双胞 100；周期为试玩裁定，PvZ2 无解包值）'],
+    ['攻击节奏', '豌豆系 20 伤 / 1.35s（PvZ2 codex 解包）'],
+    ['敌人速度', '普通 0.185 格/秒 ≈ 5.41s/格（PvZ2 codex 解包）'],
+    ['起步光露', '50（PvZ2 口径）'],
+    ['冷却表', '豌豆系 5s / 坚果 20s / 土豆雷 20s / 双胞葵 10s（PvZ2 口径）'],
   ];
   return rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('\n');
 }

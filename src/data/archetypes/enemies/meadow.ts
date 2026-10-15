@@ -18,7 +18,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '行蚁',
     flavor: '最基础的先锋，数量就是它的威胁',
     hp: 190, // PvZ2 普通僵尸（Average 档，国际版现行 190）
-    speed: 0.21, // 4.76 s/格 ≈ PvZ2 Basic(5.0 s/格)
+    speed: 0.185, // PvZ2 tutorial 普通僵尸：0.185 格/s ≈ 5.41 s/格（codex 解包）
     biteDps: ENEMY_BITE_DPS,
     armor: 'cloth',
     traits: [],
@@ -30,7 +30,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '铁喙雀',
     flavor: '掠过植株直扑篱门，火力覆盖够密才能拦下它',
     hp: 270, // PvZ2 Solid 档（≈ 海鸥僵尸 270）
-    speed: 0.3,
+    speed: 0.355, // PvZ2 海鸥僵尸：0.355 格/s ≈ 2.82 s/格（codex 解包）
     biteDps: ENEMY_BITE_DPS,
     armor: 'cloth',
     traits: ['flying'],
@@ -43,7 +43,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '啮背鼠',
     flavor: '路过生产位会停下来啃一口再走',
     hp: 190, // Average
-    speed: 0.23,
+    speed: 0.185, // PvZ2 basic 档速 0.185 格/s（codex 解包）
     biteDps: ENEMY_BITE_DPS,
     armor: 'hide',
     traits: ['gnaw_pause'],
@@ -55,7 +55,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '灰潮群',
     flavor: '一波四五只结伴而来，用爆炸款待它们',
     hp: 100, // PvZ2 Fragile 档（群怪单体便宜：≈ 小鸡僵尸/小鬼）
-    speed: 0.26,
+    speed: 0.6, // 折中值：codex 僵尸鸡 2.0 格/s 过速，群体取 0.6（codex 参照+注释声明）
     biteDps: ENEMY_BITE_DPS,
     armor: 'cloth',
     traits: ['swarm'],
@@ -67,7 +67,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '藤蟒',
     flavor: '无视减速缓慢推进，硬控拦不住它',
     hp: 560, // PvZ2 Protected 档（≈ 路障僵尸 560）
-    speed: 0.14,
+    speed: 0.185, // PvZ2 路障档速度 0.185 格/s（codex 解包）
     biteDps: ENEMY_BITE_DPS,
     armor: 'cloth',
     traits: ['slow_immune'],
@@ -79,7 +79,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '织网蛛',
     flavor: '吐网定住最近的防守单位，先手很烦',
     hp: 350, // Protected 档下沿
-    speed: 0.18,
+    speed: 0.18, // 自拟 0.18 格/s（无 codex 对应条目，basic 档附近）
     biteDps: ENEMY_BITE_DPS,
     armor: 'cloth',
     traits: ['web_stun'],
@@ -91,7 +91,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '举壳兵',
     flavor: '壳挡正面弹道，绕后或抛投才能破',
     hp: 560, // Protected（≈ 路障 370 + 本体 190）
-    speed: 0.18,
+    speed: 0.185, // PvZ2 路障档速 0.185 格/s（codex 解包）
     biteDps: ENEMY_BITE_DPS,
     armor: 'shell',
     traits: ['shell_block_front'],
@@ -103,7 +103,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '啃藤兽',
     flavor: '专挑攻击单位啃，不清完不停口',
     hp: 490, // Protected 档下沿
-    speed: 0.23,
+    speed: 0.185, // PvZ2 Protected 档同速 basic 0.185 格/s（codex 参照，无对应条目）
     biteDps: ENEMY_BITE_DPS,
     armor: 'hide',
     traits: ['targets_attackers'],
@@ -115,7 +115,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '吮光蛾',
     flavor: '飞过掉落物时一口吞掉，手慢无',
     hp: 270, // Solid
-    speed: 0.26,
+    speed: 0.22, // Solid 档自拟 0.22 格/s（无 codex 对应条目，档内取值）
     biteDps: ENEMY_BITE_DPS,
     armor: 'cloth',
     traits: ['eats_drops'],
@@ -127,7 +127,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '石皮兽',
     flavor: '铁甲慢步还带火抗，钝击系的活靶子',
     hp: 1290, // PvZ2 Hardened 档（≈ 铁桶 1100 + 本体 190）
-    speed: 0.11,
+    speed: 0.185, // PvZ2 铁桶僵尸 0.185 格/s（codex 解包）
     biteDps: ENEMY_BITE_DPS,
     armor: 'iron',
     traits: ['fire_resist'],
@@ -139,7 +139,7 @@ export const meadowEnemies: readonly EnemyInput[] = [
     name: '石皮巨兽',
     flavor: '草原之主：高甲低速，召唤蚁群补线',
     hp: 3600, // PvZ2 Great 档（Gargantuar 3600）；真 Zombot（18500+）留后续世界
-    speed: 0.09,
+    speed: 0.24, // PvZ2 巨尸 0.24 格/s ≈ 4.17 s/格（codex 解包）
     biteDps: BOSS_BITE_DPS, // 原创加压：PvZ2 Zombot 不啃食
     armor: 'shell',
     traits: ['summon', 'fire_resist'],

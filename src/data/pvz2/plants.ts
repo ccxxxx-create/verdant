@@ -1,7 +1,12 @@
 /**
  * PvZ2 植物权威参考表（只读）。
- * 来源：plantsvszombies.wiki.gg — `Plants_(PvZ2)`（花费/充能表）与各植物独立条目页（HP/伤害）。
- * 版本基准：PvZ2 v13.5.1；抓取日期 2026-10-14。数值均为 **Level 1**。
+ * 来源：F:/game-codex/ 两代图鉴（2026-10-15 抓取）——
+ * - 成本/充能：PvZ2 wiki（plantsvszombies.wiki.gg `Plants_(PvZ2)`）
+ * - 伤害/间隔/武装时间：Gardendless 解包（Gzh0821/pvzg_site，国际版 13.x；见 docs/PVZ2-ALIGN-CODEX.md）
+ * 版本基准：PvZ2 国际版约 13.x；数值均为 Level 1。
+ *
+ * 口径纪律：**PvZ2 为唯一主锚**；两源冲突时以 codex 解包为准（例：豌豆攻击间隔解包 1.35s，
+ * wiki 表 1.425s 为旧口径）；PvZ1 仅 PvZ2 无数据时补缺并标注。PvZ2 中国版条目标 pvz2cn。
  *
  * 注意：PvZ2 的充能（recharge）与 PvZ1 不同——豌豆/向日葵等多为 **5 秒**（PvZ1 为 7.5 秒）。
  */
@@ -22,6 +27,8 @@ export interface Pvz2PlantRef {
   intervalMs?: number;
   /** 参考 DPS（Lv1）。 */
   dps?: number;
+  /** 武装时间（秒，土豆雷类埋地启动）。 */
+  armingTimeS?: number;
   /** Plant Food 效果描述。 */
   plantFood: string;
   /** 本仓承担该角色的单位 id；无对应为 null。 */
@@ -38,11 +45,11 @@ export const PVZ2_PLANTS: readonly Pvz2PlantRef[] = [
     rechargeS: 5,
     hp: 300,
     damage: 20,
-    intervalMs: 1425,
-    dps: 14.035,
+    intervalMs: 1350,
+    dps: 14.8,
     plantFood: '变加特林形态，2 秒内连发 60 颗豌豆',
     repoUnit: 'thorn_pea',
-    note: '仓库已对齐（充能 5s / cost 100 / 伤害 20 / 间隔 1.425s / HP 300）',
+    note: '仓库已对齐（充能 5s / cost 100 / 伤害 20 / 间隔 1.35s / HP 300）。间隔取 codex 解包 1.35s（wiki 表 1.425s 旧口径作废）',
   },
   {
     id: 'sunflower',
@@ -51,7 +58,7 @@ export const PVZ2_PLANTS: readonly Pvz2PlantRef[] = [
     rechargeS: 5,
     plantFood: '立即产出大量阳光',
     repoUnit: 'firefly_reed',
-    note: '仓库已对齐（单次产出 50 / 充能 5s）',
+    note: '仓库已对齐（单次产出 50 / 充能 5s）。产出周期 PvZ2 codex 无数字：24s 为本仓试玩裁定值（PvZ1 参考 23.5~25s，挂账）',
   },
   {
     id: 'wallNut',
@@ -68,18 +75,36 @@ export const PVZ2_PLANTS: readonly Pvz2PlantRef[] = [
     nameZh: '土豆雷',
     cost: 25,
     rechargeS: 20,
+    hp: 300,
+    damage: 1800,
+    armingTimeS: 14,
     plantFood: '立即武装并生成多个自身复制',
     repoUnit: 'drum_cap',
-    note: '仓库已对齐（充能 20s / cost 25）；埋地时长 12s 待与 PvZ2 武装时间核对',
+    note: '仓库已对齐（充能 20s / cost 25）；武装时间取 codex 解包 14s（PvZ1 反编译为 15s，两代差 1s）',
   },
   {
     id: 'cabbagePult',
     nameZh: '卷心菜投手',
     cost: 100,
     rechargeS: 5,
+    hp: 300,
+    damage: 40,
     plantFood: '向每个僵尸投掷多个卷心菜，造成重伤害',
     repoUnit: 'lob_shroom',
-    note: '仓库已对齐（cost 100 / 充能 5s）',
+    note: '仓库已对齐（cost 100 / 充能 5s / 伤害 40）。攻击间隔 codex 无数字 → 补缺 PvZ1 反编译「2.86~3s/发」取 2900ms（标 PvZ1）',
+  },
+  {
+    id: 'firePeashooter',
+    nameZh: '火焰豌豆',
+    cost: 175,
+    rechargeS: 5,
+    hp: 300,
+    damage: 40,
+    intervalMs: 1350,
+    dps: 29.6,
+    plantFood: '射出可点燃僵尸的火焰豌豆',
+    repoUnit: 'ember_fluff',
+    note: '仓库已全对齐（cost 175 / 充能 5s / 伤害 40 / 间隔 1.35s）。mapping.ts 原标 no-counterpart 已修正',
   },
   {
     id: 'repeater',
@@ -95,18 +120,26 @@ export const PVZ2_PLANTS: readonly Pvz2PlantRef[] = [
     nameZh: '寒冰射手',
     cost: 150,
     rechargeS: 5,
+    hp: 300,
+    damage: 20,
+    intervalMs: 1350,
+    dps: 14.8,
     plantFood: '先冰冻整列僵尸，再射出一连串冰冻豌豆',
     repoUnit: 'frost_pea',
-    note: '仓库已对齐（cost 150 / 充能 5s）',
+    note: '仓库已对齐（cost 150 / 充能 5s / 伤害 20 / 间隔 1.35s）。codex 该条为 pvz2cn 中国版代际，成本与 wiki 国际版一致',
   },
   {
     id: 'threepeater',
     nameZh: '三线射手',
     cost: 300,
     rechargeS: 5,
+    hp: 300,
+    damage: 20,
+    intervalMs: 1350,
+    dps: 14.8,
     plantFood: '向多个方向散射豌豆造成伤害',
     repoUnit: 'trifold_arrow',
-    note: '仓库已对齐（cost 300 / 充能 5s）',
+    note: '仓库已对齐（cost 300 / 充能 5s / 伤害 20 / 间隔 1.35s）',
   },
   {
     id: 'cherryBomb',
@@ -152,6 +185,40 @@ export const PVZ2_PLANTS: readonly Pvz2PlantRef[] = [
     plantFood: '将本行所有僵尸拉到自身位置并造成伤害',
     repoUnit: null,
     note: '仓库缺该单位',
+  },
+  {
+    id: 'lightningReed',
+    nameZh: '闪电芦苇',
+    cost: 125,
+    rechargeS: 5,
+    hp: 300,
+    damage: 10,
+    plantFood: '召来雷云向僵尸劈下闪电',
+    repoUnit: null,
+    note: '参照行：本仓闪电菇（storm_cap）为 3×3 范围落雷，与芦苇「多目标电弧」机制不同，AOE 数值（45 伤/2500ms/300 阳光）为参照芦苇强度自拟并登记',
+  },
+  {
+    id: 'plantern',
+    nameZh: '路灯花',
+    cost: 75,
+    rechargeS: 10,
+    hp: 300,
+    plantFood: '使附近的植物隐形以躲避僵尸',
+    repoUnit: null,
+    note: '参照行：本仓雾灯（mist_lamp）为「反 cover 让投掷百发百中」，与 plantern「驱雾显形」机制不同，25 阳光/15s 充能为自拟并登记',
+  },
+  {
+    id: 'dandelion',
+    nameZh: '蒲公英',
+    cost: 275,
+    rechargeS: 15,
+    hp: 300,
+    damage: 50,
+    intervalMs: 1900,
+    dps: 26.3,
+    plantFood: '吹出一团种子，攻击多行僵尸',
+    repoUnit: 'dandelion',
+    note: '仓库已全对齐（cost 275 / 充能 15s / 伤害 50 / 间隔 1.9s）。PvZ2 精确同名单位；USER_ACQUISITION 归金币档',
   },
   {
     id: 'kernelPult',

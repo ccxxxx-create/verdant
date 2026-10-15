@@ -235,7 +235,7 @@ function updateUnits(state: BattleState, dtMs: number): void {
     if (!a) continue;
 
     if (a.kind === 'trigger') {
-      const prep = a.prepMs ?? 12000;
+      const prep = a.prepMs ?? 14000; // 默认武装 14s = PvZ2 土豆雷 armingTime（codex）
       if (state.now - u.lastShot < prep) continue;
       const reach = COL_W * ((a.radius ?? 1) + 0.2);
       let hitAny = false;

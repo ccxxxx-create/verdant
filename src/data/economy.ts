@@ -1,5 +1,5 @@
 /**
- * M2 经济数值表（用户第 13 轮拍板：金币/钻石 + 种子券 + 能量豆；4 赠送 + 6 金币购 + 3 钻石购）。
+ * M2 经济数值表（用户第 13 轮拍板：金币/钻石 + 种子券 + 能量豆；4 赠送 + 7 金币购 + 3 钻石购）。
  * 口径说明：金币=软货币（通关/重打/成就）；钻石=稀有（首三星/成就）；种子=抽奖券；
  * 能量豆=世界能量大招货币（M3 大招落地前只入账不消耗）。
  * 数值来源=自有配平（PvZ2 经济结构参考见 docs/RESEARCH-PVZ.md，非官方数据）。
@@ -14,7 +14,7 @@ export interface UnitAcquisition {
   note: string;
 }
 
-/** 14 首发角色获取渠道（4 赠送 + 6 金币购 + 4 钻石购）。 */
+/** 14 首发角色获取渠道（4 赠送 + 7 金币购 + 3 钻石购）。 */
 export const UNIT_ACQUISITION: Record<string, UnitAcquisition> = {
   firefly_reed: { channel: 'gift', note: '初始赠送' },
   thorn_pea: { channel: 'gift', note: '初始赠送' },
@@ -23,13 +23,13 @@ export const UNIT_ACQUISITION: Record<string, UnitAcquisition> = {
   drum_cap: { channel: 'coins', price: 500, note: '廉价清群手段' },
   trifold_arrow: { channel: 'coins', price: 750, note: '三连发破壳' },
   nectar_moss: { channel: 'coins', price: 800, note: '攻速光环' },
-  ember_fluff: { channel: 'coins', price: 900, note: '火系点燃' },
+  ember_fluff: { channel: 'coins', price: 900, note: '火系点燃（PvZ2 火焰豌豆数值）' },
   lob_shroom: { channel: 'coins', price: 1000, note: '本行抛射越障' },
   storm_cap: { channel: 'coins', price: 1200, note: '范围落雷' },
+  dandelion: { channel: 'coins', price: 275, note: '全屏追踪（PvZ2 蒲公英阳光价）' },
   twin_glow: { channel: 'diamonds', price: 5, note: '双灯产能翻倍' },
   tether_moss: { channel: 'diamonds', price: 6, note: '藤索定身（M3 实装）' },
   mist_lamp: { channel: 'diamonds', price: 8, note: '驱散遮挡（M3 实装）' },
-  dandelion: { channel: 'diamonds', price: 12, note: '全屏追踪打击（珍惜输出）' },
 };
 
 /** 道具购买渠道（M-INV）：道具只有金币/钻石购，无赠送渠道。 */

@@ -51,9 +51,11 @@ export const WAVE_PACING = {
    * 僵尸 HP 按 PvZ2 重锚（行蚁 45→190）后 points 约 ×4，若 base 仍为 6，
    * teach 关首波预算 3 < 行蚁 4 点 → **该波 0 只怪**（2026-10-14 审查 P1）。
    * 现值 10 由无头扫荡校准（`npm run sweep`）：6 关全胜、单关 2.9~3.7 分钟、平均推车 1.0~2.5。
+   * PvZ2 速度对齐（2026-10-15，僵尸机动性上升：藤蟒 +32%/巨人 +167% 档速）后重校：
+   * base 10→8 拉回 6 关胜率（托管 AI 对齐前 10/10 → base8 复测）。
    * 下限由 tests/pvz2Align.test.ts 的"首波非空"闸守护。
    */
-  base: 10,
+  base: 8,
   growth: 0.3,
   scale: { teach: 0.35, normal: 1, flag: 1, survive: 1, boss: 0.8, chal: 1, conveyor: 1, default: 1 } as Record<string, number>,
   finalWaveMult: 2.5,
