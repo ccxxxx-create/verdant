@@ -114,6 +114,10 @@ export function cellRect(col: number, row: number): Rect {
 export const SPAWN_X = 1960;
 /** 敌人啃食时停在植物右缘外的像素偏移（PvZ 嘴部几何；必须 > 枪口偏移）。 */
 export const BITE_OFFSET = 64;
+/** 锁定啃食目标的最大提前量（贴脸才锁定；窗口外不可见，防"锁定即瞬移"）。 */
+export const BITE_LOCK_SLACK = 24;
+/** 锁定窗口左界（负值=已越过嘴位；越过即让位给推犁线）。 */
+export const BITE_LOCK_MIN = -10;
 /** 直射弹体与敌人的命中容差（线性扫描两侧，治愈"射穿啃食者"）。 */
 export const HIT_R = 40;
 /** 推犁触发线（敌人越过即触发/破线）。 */

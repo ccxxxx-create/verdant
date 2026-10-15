@@ -20,6 +20,8 @@ import {
   spawnEnemy,
   step,
 } from '../src/core/battle/sim.ts';
+import { findBiteTarget } from '../src/core/battle/traits.ts';
+import { BITE_OFFSET, BITE_LOCK_SLACK } from '../src/core/battle/layout.ts';
 import type { BattleState } from '../src/core/battle/types.ts';
 import { firstWaveDelayMs, isHugeWave, waveBudget } from '../src/core/battle/director.ts';
 
@@ -174,6 +176,51 @@ describe('M3A battle kernel: traits', () => {
     for (let i = 0; i < 80 && u.pendingShots.length === 0; i++) step(state, SIM_DT_MS); // 首攻 tick（interval 1430ms 内）
     expect(u.pendingShots.length).toBeGreaterThan(0);
     expect(u.pendingShots[0]?.damage).toBe((u.def.attack?.damage ?? 0) * 2); // 强化 ×2
+  });
+
+  it('啃食锁定窗口：远距不瞬移、贴脸才锁定（BITE_LOCK_SLACK 回归防线）', () => {
+    const state = battle('meadow-1-1', ['thorn_pea']);
+    state.lightdew = 1000;
+    expect(cmdPlant(state, 'thorn_pea', 2, 0)).toBe(true);
+    const u = state.units[0];
+    if (!u) throw new Error('plant failed');
+    const ant = state.config.enemies.get('march_ant');
+    if (!ant) throw new Error('march_ant missing');
+    const e = spawnEnemy(state, ant, 2);
+    // 窗口外（提前量 100px > BITE_LOCK_SLACK）：不得锁定（否则锁定即瞬移 100px）
+    e.x = u.x + BITE_OFFSET + 100;
+    expect(findBiteTarget(state, e)).toBeUndefined();
+    // 窗口内（贴脸 +10px）：锁定
+    e.x = u.x + BITE_OFFSET + 10;
+    expect(findBiteTarget(state, e)).toBe(u);
+    // 深入窗口左界（-12px，越过嘴位）：不锁定（由推犁线/MOWER_LINE 负责）
+    e.x = u.x + BITE_OFFSET - 12;
+    expect(findBiteTarget(state, e)).toBeUndefined();
+  });
+
+  it('僵尸走到嘴边才咬：远距锁定被禁，行内不掉血', () => {
+    const state = battle('meadow-1-1', ['frost_pea']);
+    state.lightdew = 1000;
+    expect(cmdPlant(state, 'frost_pea', 2, 0)).toBe(true);
+    const u = state.units[0];
+    if (!u) throw new Error('plant failed');
+    const ant = state.config.enemies.get('march_ant');
+    if (!ant) throw new Error('march_ant missing');
+    const e = spawnEnemy(state, ant, 2);
+    e.x = u.x + BITE_OFFSET + 100; // 隔着 100px 站着
+    // 瞬移防线：biteTarget 锁定前每帧植物不掉血（移近靠行走完成；旧窗口 129px 会"锁定即跳咬"）
+    let lockedAt = -1;
+    for (let i = 0; i < 60; i++) {
+      step(state, SIM_DT_MS);
+      if (e.biteTarget) {
+        lockedAt = i;
+        break;
+      }
+      expect(u.hp).toBe(u.def.hp);
+    }
+    expect(lockedAt).toBeGreaterThan(0); // 走了一段才锁定，不是瞬移
+    // 锁定后吸附到嘴边（dx 落入窗口）
+    expect(e.x - BITE_OFFSET - u.x).toBeLessThan(BITE_LOCK_SLACK);
   });
 });
 

@@ -4,17 +4,19 @@
  * 单位：control / reveal / aura
  */
 import type { BattleState, EnemyInst, UnitInst } from './types.ts';
-import { BITE_OFFSET, COL_W, cellY } from './layout.ts';
+import { BITE_LOCK_MIN, BITE_LOCK_SLACK, BITE_OFFSET, COL_W, cellY } from './layout.ts';
 import { GNAW_PAUSE_S, MOTH_EAT_R, WEB_STUN_S, enemyBiteDps } from '../balance.ts';
 
-/** 同排前方最近的啃食目标；targets_attackers 优先咬攻击植物。 */
+/** 同排前方最近的啃食目标；targets_attackers 优先咬攻击植物。
+ * 锁定窗口 [BITE_LOCK_MIN, BITE_LOCK_SLACK)：只有走到嘴边才锁定（锁定后每帧吸附 target.x+BITE_OFFSET，
+ * 提前量过大就是"锁定即瞬移"）。 */
 export function findBiteTarget(state: BattleState, e: EnemyInst): UnitInst | undefined {
   let best: UnitInst | undefined;
   let bestScore = -1;
   for (const u of state.units) {
     if (u.row !== e.row || u.hp <= 0) continue;
     const dx = e.x - BITE_OFFSET - u.x;
-    if (dx < -10 || dx >= COL_W * 0.7) continue;
+    if (dx < BITE_LOCK_MIN || dx >= BITE_LOCK_SLACK) continue;
     const score = e.def.traits.includes('targets_attackers') && u.def.attack ? 1 : 0;
     if (score > bestScore || (score === bestScore && (!best || u.x > best.x))) {
       best = u;

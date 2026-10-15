@@ -56,6 +56,8 @@ const CARD_W = 112;
 const CARD_H = 128;
 const CARD_GAP = 14;
 const CARD_X0 = GRID_X0;
+/** 小推车立绘尺寸（显示锁定，防压住第一列草坪）。 */
+const GATE_SIZE = 56;
 
 // 战斗局部色别名：唯一源 = KIT（禁止再写字面量；保留短名以缩小改造面、避免大范围替换引入回归）
 const C_GOLD = KIT.goldCss;
@@ -284,8 +286,8 @@ export class BattleScene extends Phaser.Scene {
   /** 篱门小推车（一次性护盾，PvZ 参考）；消耗由 mower 事件驱动图像消失。 */
   private drawGates(): void {
     for (let r = 0; r < ROWS; r++) {
-      // 割草机：显示尺寸锁定（避免 setScale(3) 的 192px 压住第一列草坪），depth 1 保证不被单位盖住
-      this.gates[r] = this.add.image(GATE_X, cellY(r) + 10, 'icon_mower').setDisplaySize(56, 56).setDepth(1);
+      // 割草机：贴地坐标与敌人同公式（enemyFeetY，此前挂行中心致悬空）；显示尺寸锁定，depth 1 不被单位盖住
+      this.gates[r] = this.add.image(GATE_X, enemyFeetY(r, GATE_SIZE), 'icon_mower').setDisplaySize(GATE_SIZE, GATE_SIZE).setDepth(1);
     }
   }
 
@@ -771,12 +773,19 @@ export class BattleScene extends Phaser.Scene {
       case 'mower': {
         const gate = this.gates[ev.row];
         if (gate) {
-          gate.destroy();
           this.gates[ev.row] = null;
+          // 出动滑行：向右碾出草坪再销毁（此前直接消失，观感=凭空蒸发）
+          this.cameras.main.flash(160, 255, 220, 120);
+          this.floatText(GATE_X + 60, cellY(ev.row) - 30, '小推车出动！', C_CREAM);
+          this.debris(GATE_X + 20, enemyFeetY(ev.row, 56), 'n', 10);
+          this.tweens.add({
+            targets: gate,
+            x: 1980,
+            duration: 520,
+            ease: 'Quad.easeIn',
+            onComplete: () => gate.destroy(),
+          });
         }
-        this.cameras.main.flash(160, 255, 220, 120);
-        this.floatText(GATE_X + 60, cellY(ev.row) - 30, '小推车出动！', C_CREAM);
-        this.debris(GATE_X + 20, cellY(ev.row), 'n', 10);
         break;
       }
       case 'sunSpawn':
