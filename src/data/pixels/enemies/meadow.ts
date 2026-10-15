@@ -342,4 +342,15 @@ export const projectileSprites: Record<string, PixelSprite> = {
     '...K....',
     '........',
   ],
+  // 蒲公英绒球种子（白絮 + 深描边 + 奶油高光；追踪弹不旋转）
+  bullet_dandelion: [
+    '..KKKK..',
+    '.KWBWWK.',
+    'KWWWWWWK',
+    'KWKWWKWK',
+    'KWWWWWWK',
+    '.KWWWWK.',
+    '..KKKK..',
+    '........',
+  ],
 };

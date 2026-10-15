@@ -371,6 +371,42 @@ function mist_lamp() {
   return g;
 }
 
+/** 蒲公英：白绒球（受风将散）+ 絮丝 + 绿茎，职能件置顶（全屏追踪=乘风）。 */
+function dandelion() {
+  const g = blank();
+  body(g);
+  // 絮丝（头顶放射细线）
+  for (const [dx, dy] of [
+    [-6, -1],
+    [-4, -5],
+    [0, -7],
+    [4, -5],
+    [6, -1],
+  ]) {
+    hline(g, 16 + Math.min(0, dx), 16 + Math.max(0, dx), 5 + dy, 'W');
+  }
+  // 绒球主体（白芯 + 深描边 + 底影）
+  ring(g, 16, 5, 6, 5, 'K', 'W');
+  ellipse(g, 16, 7, 3, 2, 'W');
+  set(g, 9, 4, 'K');
+  set(g, 9, 6, 'K');
+  set(g, 10, 3, 'W');
+  set(g, 22, 4, 'K');
+  set(g, 22, 6, 'K');
+  set(g, 21, 3, 'W');
+  set(g, 13, 3, 'W');
+  set(g, 19, 4, 'W');
+  set(g, 16, 2, 'K');
+  // 绿茎（与身体衔接）
+  rect(g, 15, 10, 16, 12, 'd');
+  set(g, 11, 14, 'K');
+  set(g, 9, 15, 'd');
+  eyes(g, 15, 5);
+  smile(g, 19);
+  blush(g, 18);
+  feet(g);
+  return g;
+}
 const sprites = {
   firefly_reed: firefly_reed(),
   twin_glow: twin_glow(),
@@ -385,6 +421,7 @@ const sprites = {
   tether_moss: tether_moss(),
   nectar_moss: nectar_moss(),
   mist_lamp: mist_lamp(),
+  dandelion: dandelion(),
 };
 
 // —— 校验 + 落盘（与 normalize 输出同格式） ——

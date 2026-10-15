@@ -81,6 +81,7 @@ const ELEMENT_BULLET: Record<string, string> = {
   ice: 'bullet_ice',
   electric: 'bullet_electric',
   water: 'bullet_ice',
+  wind: 'bullet_dandelion', // 蒲公英追踪种子
 };
 
 /**

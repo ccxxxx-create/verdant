@@ -25,7 +25,7 @@ npm run build     # 类型检查 + 构建（输出 dist/）
 
 ## 美术体系（全像素，纯代码）
 
-- 全部资产是数据：`src/data/pixels/`（13 单位 32×32 由 `scripts/gen-pixel-units.mjs` 生成 + 11 敌人 24×24 + 4 子弹 8×8 + 20 图标 16×16 + 代码生成的明亮草原背景 320×180）
+- 全部资产是数据：`src/data/pixels/`（14 单位 32×32 由 `scripts/gen-pixel-units.mjs` 生成 + 11 敌人 24×24 + 5 子弹 8×8 + 20 图标 16×16 + 代码生成的明亮草原背景 320×180）
 - 运行时烘焙为 Phaser 纹理；调色板单一事实源；新增内容=加矩阵行
 - 改植株造型：编辑 `scripts/gen-pixel-units.mjs` 后运行 `node scripts/gen-pixel-units.mjs`
 - 敌人/图标/子弹为手写矩阵；`node scripts/normalize-pixels.mjs` 可归一化（勿覆盖单位生成器产出）

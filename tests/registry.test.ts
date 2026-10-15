@@ -7,8 +7,8 @@ describe('registry validation (CI gate, DEV-PLAN §4)', () => {
     expect(validateRegistry(allUnits, allEnemies)).toEqual([]);
   });
 
-  it('counts match GDD §5.3/§6.2 (13 units / 10 enemies + boss)', () => {
-    expect(allUnits).toHaveLength(13);
+  it('counts match GDD §5.3/§6.2 (14 units / 10 enemies + boss)', () => {
+    expect(allUnits).toHaveLength(14);
     expect(allEnemies).toHaveLength(11);
     expect(allEnemies.filter((e) => e.isBoss)).toHaveLength(1);
   });
@@ -50,6 +50,6 @@ describe('registry validation (CI gate, DEV-PLAN §4)', () => {
     const reg = registryFrom(allUnits, allEnemies);
     expect(reg.unitById.get('thorn_pea')?.name).toBe('豆射手');
     expect(reg.enemyById.size).toBe(allEnemies.length);
-    expect(reg.units).toHaveLength(13);
+    expect(reg.units).toHaveLength(14);
   });
 });

@@ -6,17 +6,17 @@ import { meadowBattleBg } from '../src/data/pixels/bg/meadow.ts';
 const keys = new Set(Object.keys(PALETTE));
 
 describe('pixel sprite data integrity', () => {
-  it('all 13 unit sprites are rectangular & in-palette', () => {
+  it('all 14 unit sprites are rectangular & in-palette', () => {
     const names = Object.keys(allUnitSprites);
-    expect(names).toHaveLength(13);
+    expect(names).toHaveLength(14);
     for (const [name, sprite] of Object.entries(allUnitSprites)) {
       expect(validatePixelSprite(name, sprite, keys)).toEqual([]);
     }
   });
 
-  it('all 11 enemy sprites + 4 projectiles + 20 icons are valid', () => {
+  it('all 11 enemy sprites + 5 projectiles + 20 icons are valid', () => {
     expect(Object.keys(allEnemySprites)).toHaveLength(11);
-    expect(Object.keys(allProjectileSprites)).toHaveLength(4);
+    expect(Object.keys(allProjectileSprites)).toHaveLength(5);
     expect(Object.keys(allPixelIcons)).toHaveLength(34); // 29 基础 + 4 道具 + 背包（M-INV）
     expect(allPixelIcons.lightdew).toBeDefined();
     expect(allPixelIcons.gate).toBeDefined();

@@ -31,6 +31,7 @@ const ELEMENT_LABEL: Record<string, string> = {
   water: '水',
   ice: '冰',
   electric: '电',
+  wind: '风',
 };
 
 const POWER_LABEL: Record<string, string> = {

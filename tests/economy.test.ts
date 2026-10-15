@@ -107,14 +107,14 @@ describe('M2 economy: gacha', () => {
 });
 
 describe('M2 economy: acquisition table', () => {
-  it('covers all 13 units with channel ratios 4 gift / 6 coins / 3 diamonds', () => {
+  it('covers all 14 units with channel ratios 4 gift / 6 coins / 4 diamonds', () => {
     for (const u of allUnits) {
       expect(UNIT_ACQUISITION[u.id], u.id).toBeDefined();
     }
     const chans = Object.values(UNIT_ACQUISITION).map((a) => a.channel);
     expect(chans.filter((c) => c === 'gift')).toHaveLength(4);
     expect(chans.filter((c) => c === 'coins')).toHaveLength(6);
-    expect(chans.filter((c) => c === 'diamonds')).toHaveLength(3);
+    expect(chans.filter((c) => c === 'diamonds')).toHaveLength(4);
   });
 
   it('priced channels have positive prices; gift has none', () => {

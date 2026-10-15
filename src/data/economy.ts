@@ -14,7 +14,7 @@ export interface UnitAcquisition {
   note: string;
 }
 
-/** 13 首发角色获取渠道（4 赠送 + 6 金币购 + 3 钻石购）。 */
+/** 14 首发角色获取渠道（4 赠送 + 6 金币购 + 4 钻石购）。 */
 export const UNIT_ACQUISITION: Record<string, UnitAcquisition> = {
   firefly_reed: { channel: 'gift', note: '初始赠送' },
   thorn_pea: { channel: 'gift', note: '初始赠送' },
@@ -24,11 +24,12 @@ export const UNIT_ACQUISITION: Record<string, UnitAcquisition> = {
   trifold_arrow: { channel: 'coins', price: 750, note: '三连发破壳' },
   nectar_moss: { channel: 'coins', price: 800, note: '攻速光环' },
   ember_fluff: { channel: 'coins', price: 900, note: '火系点燃' },
-  lob_shroom: { channel: 'coins', price: 1000, note: '抛射越障' },
+  lob_shroom: { channel: 'coins', price: 1000, note: '本行抛射越障' },
   storm_cap: { channel: 'coins', price: 1200, note: '范围落雷' },
   twin_glow: { channel: 'diamonds', price: 5, note: '双灯产能翻倍' },
   tether_moss: { channel: 'diamonds', price: 6, note: '藤索定身（M3 实装）' },
   mist_lamp: { channel: 'diamonds', price: 8, note: '驱散遮挡（M3 实装）' },
+  dandelion: { channel: 'diamonds', price: 12, note: '全屏追踪打击（珍惜输出）' },
 };
 
 /** 道具购买渠道（M-INV）：道具只有金币/钻石购，无赠送渠道。 */

@@ -76,14 +76,16 @@ export interface ProjInst {
   y: number;
   damage: number;
   element: string;
-  kind: 'straight' | 'lobbed';
-  /** lobbed 落点。 */
+  kind: 'straight' | 'lobbed' | 'homing';
+  /** lobbed 静态落点 / homing 每帧刷新的目标实时坐标。 */
   tx: number;
   ty: number;
   tRow: number;
   /** 飞行累计 ms。 */
   age: number;
   duration: number;
+  /** homing 锁定的敌人 eid（目标死亡即消散）。 */
+  targetEid?: number;
 }
 
 export interface DropInst {

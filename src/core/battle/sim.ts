@@ -15,6 +15,8 @@ import {
   BITE_OFFSET,
   COL_W,
   HIT_R,
+  HOMING_SPEED_FACTOR,
+  HOMING_TIMEOUT_MS,
   MOWER_LINE,
   MULTI_SHOT_STAGGER_MS,
   PLANT_SUN_FALL_MS,
@@ -265,12 +267,22 @@ function updateUnits(state: BattleState, dtMs: number): void {
       continue;
     }
 
+    if (a.kind === 'homing') {
+      // 蒲公英：任意行最左敌人（PvZ1 猫尾概念，全屏追踪）；目标死亡则种子消散
+      const target = nearestEnemyAnyRow(state, u.x - 20);
+      if (!target) continue;
+      u.lastShot = state.now;
+      fireHoming(state, u, target, poweredDamage(state, u, a.damage));
+      continue;
+    }
+
     if (a.kind === 'lobbed') {
-      const target = nearestEnemyAnyRow(state, u.x);
+      // 本行投掷（用户反馈 2026-10-15：任意行锁定下弧线 ty=yOffset 语义错，弹道飞顶屏；改同行）
+      const target = nearestEnemyInRow(state, u.row, u.x - 20);
       if (!target) continue;
       u.lastShot = state.now;
       const dmg = poweredDamage(state, u, a.damage);
-      fireLobbed(state, u, target, dmg, a.element);
+      fireLobbed(state, u, target, dmg, a.element ?? 'none');
       continue;
     }
 
@@ -323,8 +335,10 @@ function fireStraight(state: BattleState, u: UnitInst, damage: number, element: 
 }
 
 function fireLobbed(state: BattleState, u: UnitInst, target: EnemyInst, damage: number, element: string): void {
+  // 抛物线终点 = 发射者本行命中高度（u.y-24，与直射弹击怪高度同基准）；
+  // 旧实现 ty=target.yOffset(0) 使弧线终点直插屏幕顶缘 = "弹道显示错误"（用户反馈 2026-10-15）
   const tx = target.x;
-  const ty = target.yOffset;
+  const ty = u.y - 24;
   const dist = Math.abs(tx - u.x);
   const duration = Math.max(120, (dist / PROJ_SPEED) * 1000);
   const p: ProjInst = {
@@ -339,12 +353,35 @@ function fireLobbed(state: BattleState, u: UnitInst, target: EnemyInst, damage: 
     kind: 'lobbed',
     tx,
     ty,
-    tRow: target.row,
+    tRow: u.row,
     age: 0,
     duration,
   };
   state.projectiles.push(p);
   state.events.push({ t: 'shoot', x: u.x, y: u.y - 40, element });
+}
+
+/** 蒲公英追踪种子：锁定全场最左敌人，每帧朝目标实时坐标追击（不分行）。 */
+function fireHoming(state: BattleState, u: UnitInst, target: EnemyInst, damage: number): void {
+  const p: ProjInst = {
+    pid: ++state.seq,
+    row: u.row,
+    sx: u.x + 20,
+    sy: u.y - 24,
+    x: u.x + 20,
+    y: u.y - 24,
+    damage,
+    element: 'wind',
+    kind: 'homing',
+    tx: target.x,
+    ty: cellY(target.row) + target.yOffset,
+    tRow: target.row,
+    age: 0,
+    duration: HOMING_TIMEOUT_MS,
+    targetEid: target.eid,
+  };
+  state.projectiles.push(p);
+  state.events.push({ t: 'shoot', x: u.x, y: u.y - 24, element: 'wind' });
 }
 
 function nearestEnemyInRow(state: BattleState, row: number, fromX: number): EnemyInst | undefined {
@@ -369,6 +406,30 @@ function updateProjectiles(state: BattleState, dtMs: number): void {
   for (let i = state.projectiles.length - 1; i >= 0; i--) {
     const p = state.projectiles[i];
     if (!p) continue;
+    if (p.kind === 'homing') {
+      // 蒲公英追踪种子：目标死亡/超时即消散；每帧朝目标实时坐标追击
+      p.age += dtMs;
+      const tgt = p.targetEid !== undefined ? state.enemies.find((e) => e.eid === p.targetEid) : undefined;
+      if (!tgt || p.age >= (p.duration || HOMING_TIMEOUT_MS)) {
+        state.projectiles.splice(i, 1);
+        continue;
+      }
+      p.tRow = tgt.row;
+      p.tx = tgt.x;
+      p.ty = cellY(tgt.row) + tgt.yOffset;
+      const dx = p.tx - p.x;
+      const dy = p.ty - p.y;
+      const dist = Math.hypot(dx, dy);
+      const stepLen = PROJ_SPEED * HOMING_SPEED_FACTOR * (dtMs / 1000);
+      if (dist <= Math.max(HIT_R, stepLen)) {
+        applyProjectileHit(state, tgt, p);
+        state.projectiles.splice(i, 1);
+      } else {
+        p.x += (dx / dist) * stepLen;
+        p.y += (dy / dist) * stepLen;
+      }
+      continue;
+    }
     if (p.kind === 'lobbed') {
       p.age += dtMs;
       const t = Math.min(1, p.age / p.duration);

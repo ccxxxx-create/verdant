@@ -23,9 +23,9 @@ export const UnitArchetype = z.strictObject({
     .object({
       damage: z.number().positive(),
       intervalMs: z.number().int().positive().optional(),
-      kind: z.enum(['single', 'multi', 'aoe', 'melee', 'lobbed', 'trigger']),
+      kind: z.enum(['single', 'multi', 'aoe', 'melee', 'lobbed', 'trigger', 'homing']),
       range: z.number().nonnegative(),
-      element: z.enum(['none', 'fire', 'water', 'ice', 'electric']).default('none'),
+      element: z.enum(['none', 'fire', 'water', 'ice', 'electric', 'wind']).default('none'),
       shots: z.number().int().positive().optional(),
       radius: z.number().int().positive().optional(),
       prepMs: z.number().int().nonnegative().optional(),

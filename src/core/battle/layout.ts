@@ -124,6 +124,10 @@ export const HIT_R = 40;
 export const MOWER_LINE = GATE_X;
 /** 弹体飞行速度 px/s。 */
 export const PROJ_SPEED = 620;
+/** homing（蒲公英追踪种子）速度系数（= PROJ_SPEED × 该值）。 */
+export const HOMING_SPEED_FACTOR = 0.8;
+/** homing 最长追逐 ms（超时空中消散，防永飞）。 */
+export const HOMING_TIMEOUT_MS = 2600;
 /** 三连发类弹幕的发射间隔 ms。 */
 export const MULTI_SHOT_STAGGER_MS = 80;
 /** 露珠落地时长 ms。 */

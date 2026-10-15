@@ -178,8 +178,7 @@ describe('M3A battle kernel: traits', () => {
     expect(u.pendingShots[0]?.damage).toBe((u.def.attack?.damage ?? 0) * 2); // 强化 ×2
   });
 
-  it('啃食锁定窗口：远距不瞬移、贴脸才锁定（BITE_LOCK_SLACK 回归防线）', () => {
-    const state = battle('meadow-1-1', ['thorn_pea']);
+  it('啃食锁定窗口：远距不瞬移、贴脸才锁定（BITE_LOCK_SLACK 回归防线）', () => {    const state = battle('meadow-1-1', ['thorn_pea']);
     state.lightdew = 1000;
     expect(cmdPlant(state, 'thorn_pea', 2, 0)).toBe(true);
     const u = state.units[0];
@@ -298,5 +297,95 @@ describe('M3A battle kernel: determinism & headless sweep', () => {
       expect(cmdCollectDrop(state, anyDrop.did)).toBe(true);
       expect(state.lightdew).toBe(before + SKY_SUN.value);
     }
+  });
+});
+
+describe('lobbed same-row & dandelion homing（用户反馈 2026-10-15）', () => {
+  it('雾菇只投本行：异行敌人不触发投射', () => {
+    const state = battle('meadow-1-1', ['lob_shroom']);
+    state.lightdew = 1000;
+    expect(cmdPlant(state, 'lob_shroom', 2, 0)).toBe(true);
+    const ant = state.config.enemies.get('march_ant');
+    if (!ant) throw new Error('march_ant missing');
+    spawnEnemy(state, ant, 4); // 异行
+    for (let i = 0; i < 120; i++) step(state, SIM_DT_MS); // 6s 够反射击
+    expect(state.projectiles.filter((p) => p.kind === 'lobbed')).toHaveLength(0);
+  });
+
+  it('雾菇本行投射：弧线终点落在本行命中高度（ty=发射者行 y-24）', () => {
+    const state = battle('meadow-1-1', ['lob_shroom']);
+    state.lightdew = 1000;
+    expect(cmdPlant(state, 'lob_shroom', 2, 0)).toBe(true);
+    const u = state.units[0];
+    if (!u) throw new Error('plant failed');
+    const ant = state.config.enemies.get('march_ant');
+    if (!ant) throw new Error('march_ant missing');
+    spawnEnemy(state, ant, 2); // 同行
+    let shot = null;
+    for (let i = 0; i < 120 && !shot; i++) {
+      step(state, SIM_DT_MS);
+      shot = state.projectiles.find((p) => p.kind === 'lobbed') ?? null;
+    }
+    expect(shot).toBeTruthy();
+    if (!shot) return;
+    expect(shot.row).toBe(2);
+    expect(shot.tRow).toBe(2);
+    expect(shot.ty).toBe(u.y - 24); // 弹道修正：旧实现 ty=yOffset 致弧线飞顶屏
+  });
+
+  it('蒲公英追踪种子：跨行命中且射的是全场最左敌人', () => {
+    const state = battle('meadow-1-1', ['dandelion']);
+    state.lightdew = 1000;
+    expect(cmdPlant(state, 'dandelion', 0, 0)).toBe(true);
+    const ant = state.config.enemies.get('march_ant');
+    if (!ant) throw new Error('march_ant missing');
+    const eTop = spawnEnemy(state, ant, 5); // 远行
+    eTop.x = 1500;
+    const eLow = spawnEnemy(state, ant, 2); // 更左（更靠家）
+    eLow.x = 1200;
+    let homing = null;
+    for (let i = 0; i < 60 && !homing; i++) {
+      step(state, SIM_DT_MS);
+      homing = state.projectiles.find((p) => p.kind === 'homing') ?? null;
+    }
+    expect(homing).toBeTruthy();
+    if (!homing) return;
+    expect(homing.element).toBe('wind');
+    expect(homing.targetEid).toBe(eLow.eid); // 全场最左优先（不分行）
+    // 追击直到命中：目标在异行（row2 vs 发射者 row0）——跨行能力本体
+    for (let i = 0; i < 200 && eLow.hp > 0; i++) step(state, SIM_DT_MS);
+    expect(eLow.hp).toBeLessThan(eLow.maxHp);
+    expect(eTop.hp).toBe(eTop.maxHp); // 不打非锁定目标
+  });
+
+  it('蒲公英追踪种子：目标死亡即消散（不留幽灵弹）', () => {
+    const state = battle('meadow-1-1', ['dandelion']);
+    state.lightdew = 1000;
+    expect(cmdPlant(state, 'dandelion', 0, 0)).toBe(true);
+    const ant = state.config.enemies.get('march_ant');
+    if (!ant) throw new Error('march_ant missing');
+    const e = spawnEnemy(state, ant, 3);
+    e.x = 1200;
+    let homing = null;
+    for (let i = 0; i < 60 && !homing; i++) {
+      step(state, SIM_DT_MS);
+      homing = state.projectiles.find((p) => p.kind === 'homing') ?? null;
+    }
+    expect(homing).toBeTruthy();
+    if (!homing) return;
+    // 目标死亡（内核敌人被移除，eid 作废）
+    const idx = state.enemies.indexOf(e);
+    if (idx >= 0) state.enemies.splice(idx, 1);
+    for (let i = 0; i < 20; i++) step(state, SIM_DT_MS);
+    expect(state.projectiles.some((p) => p.pid === homing.pid)).toBe(false);
+  });
+
+  it('蒲公英数值：30 伤 / 1500ms 间隔（珍惜全屏输出）', () => {
+    const def = REG.unitById.get('dandelion');
+    if (!def) throw new Error('dandelion missing from registry');
+    expect(def.attack?.kind).toBe('homing');
+    expect(def.attack?.damage).toBe(30);
+    expect(def.attack?.intervalMs).toBe(1500);
+    expect(def.cost).toBe(25);
   });
 });

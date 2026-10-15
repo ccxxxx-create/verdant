@@ -1,7 +1,7 @@
 import { enemyPoints, type UnitInput } from '../../../core/schema/unit.ts';
 import { PVZ2_STANDARD_RECHARGE_MS, pvz2Cost, pvz2RechargeMs } from '../../pvz2/plants.ts';
 
-/** 晨雾草原首发 13 单位（GDD §5.3 数值冻结基准 + §14.2 flavor 特色介绍）。 */
+/** 晨雾草原首发 14 单位（GDD §5.3 数值冻结基准 + §14.2 flavor 特色介绍）。 */
 export const meadowUnits: readonly UnitInput[] = [
   {
     id: 'firefly_reed',
@@ -175,5 +175,20 @@ export const meadowUnits: readonly UnitInput[] = [
     behaviors: ['reveal'],
     reveal: { durationMs: 30000 },
     traits: ['anti_cover'],
+  },
+  {
+    id: 'dandelion',
+    world: 'meadow',
+    role: 'attacker',
+    name: '蒲公英',
+    flavor: '绒球种子乘风追踪全屏敌人，专收漏行漏线的漏网之怪',
+    cost: 25,
+    cooldownMs: PVZ2_STANDARD_RECHARGE_MS, // 5s 标准充能
+    hp: 300,
+    behaviors: ['attack'],
+    // 全屏追踪（PvZ1 猫尾概念）：伤害对标冰豆(20)/火豆(35)之间，射速慢半档防超模；
+    // 无元素伤害（纯撞击），可打飞行。大招走 generic（强化期 ×2）。
+    attack: { damage: 30, intervalMs: 1500, kind: 'homing', range: 99, element: 'wind' },
+    traits: ['vs_air'],
   },
 ];
