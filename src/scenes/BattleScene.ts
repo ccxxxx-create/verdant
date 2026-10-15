@@ -81,6 +81,16 @@ const ELEMENT_BULLET: Record<string, string> = {
   water: 'bullet_ice',
 };
 
+/**
+ * 元素打击感配色（用户拍板 2026-10-15：轻量增强、颜色区分）。
+ * debris = PALETTE 碎屑色键；ring = 单位脚底光环 RGB。冰蓝/火红/电紫三档。
+ */
+const ELEMENT_FX: Record<string, { debris: string; ring: number }> = {
+  ice: { debris: 'I', ring: 0x7fd4f0 }, // 冰蓝
+  fire: { debris: 'R', ring: 0xff8a3d }, // 火红
+  electric: { debris: 'P', ring: 0x9b7bf0 }, // 电紫
+};
+
 /** 烘焙全部像素纹理（图鉴/战斗/选卡共用；幂等）。 */
 export function ensurePixelTextures(scene: Phaser.Scene): void {
   for (const u of allUnits) bakePixelTexture(scene, `unit_${u.id}`, (unitSprites[u.id] ?? unitSprites.trifold_arrow) as PixelSprite, 4);
@@ -120,6 +130,8 @@ export class BattleScene extends Phaser.Scene {
   private enemyImgs = new Map<number, Phaser.GameObjects.Image>();
   private projImgs = new Map<number, Phaser.GameObjects.Image>();
   private dropImgs = new Map<number, Phaser.GameObjects.Image>();
+  /** 元素单位脚底光环（随单位生命周期管理，防单位被铲/吃后残留）。 */
+  private unitRings = new Map<number, Phaser.GameObjects.Graphics>();
   private cardParts: Phaser.GameObjects.GameObject[] = [];
   private handParts: Phaser.GameObjects.GameObject[] = []; // 传送带手牌卡（重建随内核 hand diff）
   private cards: CardRef[] = [];
@@ -210,6 +222,7 @@ export class BattleScene extends Phaser.Scene {
     this.enemyImgs.clear();
     this.projImgs.clear();
     this.dropImgs.clear();
+    this.unitRings.clear();
     for (const go of this.cardParts) go.destroy();
     this.cardParts = [];
     for (const go of this.handParts) go.destroy();
@@ -635,6 +648,8 @@ export class BattleScene extends Phaser.Scene {
           this.debris(img.x, img.y, 'd', 6);
           img.destroy();
           this.unitImgs.delete(ev.unit.uid);
+          this.unitRings.get(ev.unit.uid)?.destroy();
+          this.unitRings.delete(ev.unit.uid);
         }
         break;
       }
@@ -655,13 +670,17 @@ export class BattleScene extends Phaser.Scene {
           this.debris(img.x, img.y, 'M', 8);
           img.destroy();
           this.unitImgs.delete(ev.unit.uid);
+          this.unitRings.get(ev.unit.uid)?.destroy();
+          this.unitRings.delete(ev.unit.uid);
         }
         break;
       }
       case 'hit': {
         const img = ev.tid !== undefined ? (ev.target === 'enemy' ? this.enemyImgs.get(ev.tid) : this.unitImgs.get(ev.tid)) : undefined;
         if (ev.target === 'enemy') {
-          this.debris(ev.x, img?.y ?? ev.y, 'h', 3);
+          // 元素命中：冰蓝/火红/电紫碎屑加量，与子弹同色一眼可辨（用户拍板：颜色区分）
+          const fx = ELEMENT_FX[ev.element];
+          this.debris(ev.x, img?.y ?? ev.y, fx?.debris ?? 'h', fx ? 6 : 3);
           if (ev.damage > 0) this.floatText(ev.x, (img?.y ?? ev.y) - 30, String(ev.damage), '#FFFFFF', 15);
         }
         break;
@@ -796,11 +815,18 @@ export class BattleScene extends Phaser.Scene {
         img = this.add.image(u.x, u.y, `unit_${u.def.id}`).setDepth(2);
         this.unitImgs.set(u.uid, img);
       }
+      // 元素光环：冰豆蓝/火豆红/电菇紫（射手家族远看同是绿团子，光环即元素身份证）
+      const fx = ELEMENT_FX[u.def.attack?.element ?? ''];
+      if (fx && !this.unitRings.has(u.uid)) {
+        this.unitRings.set(u.uid, this.elementRing(u.x, u.y + 40, fx.ring));
+      }
     }
     for (const [uid, img] of this.unitImgs) {
       if (!seenU.has(uid)) {
         img.destroy();
         this.unitImgs.delete(uid);
+        this.unitRings.get(uid)?.destroy();
+        this.unitRings.delete(uid);
       }
     }
     // 敌人（地面脚贴行底+摇摆；飞行悬空+内核漂移）
@@ -951,6 +977,16 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // —— 打击感件套（M2 移植；随机一律 fxRng，不碰内核随机序列） ——
+  /** 元素单位脚底光环（冰蓝/火红/电紫）：填充淡色 + 深绿描边，静态不随单位动画。 */
+  private elementRing(x: number, y: number, color: number): Phaser.GameObjects.Graphics {
+    const g = this.add.graphics().setDepth(1);
+    g.fillStyle(color, 0.35);
+    g.fillEllipse(x, y, 68, 22);
+    g.lineStyle(3, KIT.outline, 0.85);
+    g.strokeEllipse(x, y, 68, 22);
+    return g;
+  }
+
   private squash(img: Phaser.GameObjects.Image, overshoot = 1.12): void {
     this.tweens.add({
       targets: img,
