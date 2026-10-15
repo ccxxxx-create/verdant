@@ -120,8 +120,8 @@ export const BITE_LOCK_SLACK = 24;
 export const BITE_LOCK_MIN = -10;
 /** 直射弹体与敌人的命中容差（线性扫描两侧，治愈"射穿啃食者"）。 */
 export const HIT_R = 40;
-/** 推犁触发线（敌人越过即触发/破线）。 */
-export const MOWER_LINE = GATE_X + 20;
+/** 推犁触发线（敌人越过即触发/破线）= 推车立绘中心 GATE_X（用户反馈：与推车视觉位置差 20px 有偏移）。 */
+export const MOWER_LINE = GATE_X;
 /** 弹体飞行速度 px/s。 */
 export const PROJ_SPEED = 620;
 /** 三连发类弹幕的发射间隔 ms。 */

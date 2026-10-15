@@ -885,9 +885,9 @@ export class BattleScene extends Phaser.Scene {
       let img = this.dropImgs.get(d.did);
       if (!img) {
         img = this.add
-          .image(d.x, d.y, d.kind === 'light' ? 'icon_lightdew' : 'icon_energy')
-          .setDepth(3)
-          .setScale(d.kind === 'light' ? 1.6 : 1.4);
+        .image(d.x, d.y, d.kind === 'light' ? 'icon_lightdew' : 'icon_energy')
+        .setDepth(3)
+        .setScale(d.kind === 'light' ? 1.6 : 0.95); // 能量豆 1.4×(90px) 偏大，用户反馈"部分场景太大"；露珠蛾保持
         this.dropImgs.set(d.did, img);
       }
       const bob = d.falling ? 0 : Math.sin(this.bt.now / 300 + d.did) * 3;
@@ -956,10 +956,10 @@ export class BattleScene extends Phaser.Scene {
       }
       return;
     }
-    // 3) 收集露珠/能量（一次点击只做一个意图；内核只匹配已落地者）
-    const drop = findCollectableDrop(this.bt, p.x, p.y);
+    // 3) 收集露珠/能量（一次点击只做一个意图；下落中也可点——用户反馈 2026-10-15）
+    const drop = findCollectableDrop(this.bt, p.x, p.y, { includeFalling: true });
     if (drop) {
-      cmdCollectDrop(this.bt, drop.did);
+      cmdCollectDrop(this.bt, drop.did, { includeFalling: true });
       return;
     }
     // 4) 种植（命令发内核；失败原因提示）

@@ -612,8 +612,8 @@ export function cmdDig(state: BattleState, row: number, col: number): boolean {
   return true;
 }
 
-export function cmdCollectDrop(state: BattleState, dropId: number): boolean {
-  const idx = state.drops.findIndex((d) => d.did === dropId && !d.falling);
+export function cmdCollectDrop(state: BattleState, dropId: number, opts: { includeFalling?: boolean } = {}): boolean {
+  const idx = state.drops.findIndex((d) => d.did === dropId && (opts.includeFalling || !d.falling));
   if (idx < 0) return false;
   const d = state.drops[idx];
   if (!d) return false;
@@ -636,11 +636,13 @@ export function cmdUsePlantFoodAtCell(state: BattleState, row: number, col: numb
   return usePlantFoodAtCell(state, row, col);
 }
 
-/** Sun collection hit test helper (the scene calls it after pointerdown). */
-export function findCollectableDrop(state: BattleState, px: number, py: number): DropInst | undefined {
+/** Sun collection hit test helper (the scene calls it after pointerdown).
+ *  opts.includeFalling：下落中的露珠也可收（用户反馈 2026-10-15：下落过程可点，
+ *  此前只有停稳才能收）；默认 false 保持旧语义。 */
+export function findCollectableDrop(state: BattleState, px: number, py: number, opts: { includeFalling?: boolean } = {}): DropInst | undefined {
   for (let i = state.drops.length - 1; i >= 0; i--) {
     const d = state.drops[i];
-    if (!d || d.falling) continue;
+    if (!d || (d.falling && !opts.includeFalling)) continue;
     if (Math.hypot(px - d.x, py - d.y) <= SUN_PICK_R) return d;
   }
   return undefined;

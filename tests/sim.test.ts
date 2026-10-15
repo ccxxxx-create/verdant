@@ -8,7 +8,7 @@ import level15 from '../src/data/levels/meadow-1-5.json';
 import level41 from '../src/data/levels/meadow-4-1.json';
 import { registryFrom } from '../src/core/registry.ts';
 import { allEnemies, allUnits } from '../src/data/archetypes/index.ts';
-import { SIM_DT_MS, SHIELD_HP } from '../src/core/balance.ts';
+import { SIM_DT_MS, SHIELD_HP, SKY_SUN } from '../src/core/balance.ts';
 import { cellX } from '../src/core/battle/layout.ts';
 import {
   cmdCollectDrop,
@@ -279,19 +279,24 @@ describe('M3A battle kernel: determinism & headless sweep', () => {
     expect(drainEvents(state).length).toBe(0);
   });
 
-  it('findCollectableDrop 只匹配已落地露珠', () => {
+  it('findCollectableDrop 默认只匹配已落地露珠；includeFalling 放下落可收', () => {
     const state = battle('meadow-1-1');
     for (let i = 0; i < 110; i++) step(state, SIM_DT_MS); // 首滴 4.25s 天降 → 必有露珠
     const anyDrop = state.drops[0];
     expect(anyDrop).toBeTruthy();
     if (!anyDrop) return;
+    const before = state.lightdew;
     if (anyDrop.falling) {
-      expect(findCollectableDrop(state, anyDrop.x, anyDrop.y)).toBeUndefined();
-      // 泵到落地后同坐标可收集
-      for (let i = 0; i < 100 && anyDrop.falling; i++) step(state, SIM_DT_MS);
-      expect(findCollectableDrop(state, anyDrop.x, anyDrop.y)?.did).toBe(anyDrop.did);
+      expect(findCollectableDrop(state, anyDrop.x, anyDrop.y)).toBeUndefined(); // 默认不收落空中的
+      // 用户反馈 2026-10-15：下落过程也可点（opts.includeFalling）
+      expect(findCollectableDrop(state, anyDrop.x, anyDrop.y, { includeFalling: true })?.did).toBe(anyDrop.did);
+      expect(cmdCollectDrop(state, anyDrop.did, { includeFalling: true })).toBe(true);
+      expect(state.lightdew).toBe(before + SKY_SUN.value);
+      expect(state.drops.find((d) => d.did === anyDrop.did)).toBeUndefined(); // 已入袋
     } else {
       expect(findCollectableDrop(state, anyDrop.x, anyDrop.y)?.did).toBe(anyDrop.did);
+      expect(cmdCollectDrop(state, anyDrop.did)).toBe(true);
+      expect(state.lightdew).toBe(before + SKY_SUN.value);
     }
   });
 });
