@@ -40,34 +40,69 @@ function hline(g, x0, x1, y, ch) {
   for (let x = x0; x <= x1; x++) set(g, y, x, ch);
 }
 
-/** 白睛黑瞳+高光（可爱脸核心，反馈#1：不再是大黑窟窿）。 */
-function eyes(g, cy, gap, pupilDx = 0) {
+/**
+ * 白睛黑瞳+高光（可爱脸核心，反馈#1：不再是大黑窟窿）。
+ * mood：calm 常规 / cool 冷脸半眯（冰系） / aim 专注瞄准（射手）/ sharp 怒目（雷系）
+ */
+function eyes(g, cy, gap, pupilDx = 0, mood = 'calm') {
   for (const sx of [-1, 1]) {
     const cx = 16 + sx * gap;
     ellipse(g, cx, cy, 2, 3, 'W');
-    rect(g, cx - 1 + pupilDx * sx, cy - 1, cx + pupilDx * sx, cy + 1, 'K');
-    set(g, cy - 1, cx - 1 + pupilDx * sx, 'W'); // 瞳内高光
+    if (mood === 'cool') {
+      // 半眯：瞳压扁一行 + 上眼皮 K 压沿
+      rect(g, cx - 1 + pupilDx * sx, cy - 1, cx + pupilDx * sx, cy, 'K');
+      set(g, cy - 1, cx - 1 + pupilDx * sx, 'W');
+      rect(g, cx - 2, cy - 3, cx + 2, cy - 3, 'K');
+    } else if (mood === 'aim') {
+      rect(g, cx - 1, cy - 1, cx + 1, cy + 1, 'K');
+      set(g, cy, cx - 1, 'W'); // 高光偏向光标
+      rect(g, cx - 2, cy + 3, cx + 1, cy + 3, 'K'); // 下眼线
+    } else if (mood === 'sharp') {
+      rect(g, cx - 1 + pupilDx * sx, cy - 1, cx + pupilDx * sx, cy + 1, 'K');
+      set(g, cy - 2, cx - 1 + pupilDx * sx, 'W');
+      set(g, cy - 3, cx - 1 + sx, 'K'); // 眉
+      set(g, cy - 3, cx + sx, 'K');
+    } else {
+      rect(g, cx - 1 + pupilDx * sx, cy - 1, cx + pupilDx * sx, cy + 1, 'K');
+      set(g, cy - 1, cx - 1 + pupilDx * sx, 'W'); // 瞳内高光
+    }
   }
 }
-/** 微笑（5 像素小嘴）。 */
-function smile(g, y) {
-  set(g, y, 13, 'K');
-  set(g, y + 1, 14, 'K');
-  set(g, y + 1, 15, 'K');
-  set(g, y + 1, 16, 'K');
-  set(g, y, 17, 'K');
+/** 嘴型：smile 微笑 / grin 咧嘴笑 / closed 严肃抿嘴 / o 圆嘴。 */
+function smile(g, y, kind = 'smile') {
+  if (kind === 'grin') {
+    set(g, y, 12, 'K');
+    for (let x = 13; x <= 18; x++) set(g, y, x, 'K');
+    set(g, y, 19, 'K');
+    set(g, y - 1, 12, 'K');
+    set(g, y - 1, 19, 'K');
+  } else if (kind === 'closed') {
+    rect(g, 13, y, 18, y, 'K');
+    set(g, y - 1, 15, 'K');
+    set(g, y - 1, 16, 'K');
+  } else if (kind === 'o') {
+    rect(g, 14, y - 1, 17, y, 'K');
+    set(g, y - 1, 15, 'W');
+  } else {
+    set(g, y, 13, 'K');
+    set(g, y + 1, 14, 'K');
+    set(g, y + 1, 15, 'K');
+    set(g, y + 1, 16, 'K');
+    set(g, y, 17, 'K');
+  }
 }
-function blush(g, y) {
+function blush(g, y, on = true) {
+  if (!on) return;
   set(g, y, 8, 'f');
   set(g, y, 9, 'f');
   set(g, y, 22, 'f');
   set(g, y, 23, 'f');
 }
-/** 三阶明暗身体：高光（左上）+ 主色 + 底部暗边。 */
-function body(g, cx = 16, cy = 19, rx = 9, ry = 8, main = 'M') {
+/** 三阶明暗身体：高光（左上）+ 主色 + 底部暗边。色阶可传（元素单位身体元素化，PvZ 寒冰射手式）。 */
+function body(g, cx = 16, cy = 19, rx = 9, ry = 8, main = 'M', hi = 'L', lo = 'D') {
   ring(g, cx, cy, rx, ry, 'K', main);
-  ellipse(g, cx - 3, cy - 3, 4, 3, 'L');
-  ellipse(g, cx + 4, cy + 4, 2.5, 2, 'D');
+  ellipse(g, cx - 3, cy - 3, 4, 3, hi);
+  ellipse(g, cx + 4, cy + 4, 2.5, 2, lo);
 }
 function feet(g, y = 27) {
   rect(g, 10, y, 13, y + 1, 'd');
@@ -102,29 +137,34 @@ function petalCrown(g, cy, r, petal = 'h', center = 'G') {
 // —— 逐单位装配 ——
 function firefly_reed() {
   const g = blank();
-  hline(g, 15, 16, 9, 'd'); // 花茎
-  hline(g, 15, 16, 10, 'd');
-  petalCrown(g, 6, 5);
-  body(g);
+  hline(g, 15, 16, 11, 'd'); // 高茎（瘦高体型，与双灯草矮墩对位）
+  hline(g, 15, 16, 12, 'd');
+  petalCrown(g, 5, 5);
+  body(g, 16, 20, 7, 8); // 瘦高
+  // 萤火虫绕身（产能光点）
+  ring(g, 8, 15, 1.5, 1.5, 'K', 'G');
+  set(g, 14, 7, 'W');
+  ring(g, 25, 13, 1.5, 1.5, 'K', 'G');
+  set(g, 12, 24, 'W');
+  set(g, 26, 18, 'G');
+  set(g, 6, 22, 'G');
   leafPair(g, 23);
-  eyes(g, 15, 5);
-  smile(g, 19);
-  blush(g, 18);
+  eyes(g, 16, 4);
+  smile(g, 20, 'grin');
+  blush(g, 19);
   feet(g);
   return g;
 }
 function twin_glow() {
   const g = blank();
   for (const cx of [11, 21]) {
-    hline(g, cx, cx + 1, 8, 'd');
-    hline(g, cx, cx + 1, 9, 'd');
-    ring(g, cx, 6, 2.5, 2.5, 'K', 'G');
-    set(g, 5, cx - 1, 'W');
+    rect(g, cx, 2, cx + 1, 8, 'd');
+    ring(g, cx, 5, 2.5, 2.5, 'K', 'G');
+    set(g, 4, cx - 1, 'W');
   }
-  body(g);
-  leafPair(g, 23);
-  eyes(g, 15, 5);
-  smile(g, 19);
+  body(g, 16, 17, 9, 7); // 矮墩（双灯压顶，视觉重心全在灯上）
+  eyes(g, 15, 4);
+  smile(g, 19, 'closed');
   blush(g, 18);
   feet(g);
   return g;
@@ -132,7 +172,7 @@ function twin_glow() {
 function thorn_pea() {
   const g = blank();
   body(g);
-  // 发射管（朝右，PvZ 式射手剪影）
+  // 发射管（朝右，PvZ 式射手剪影）+ 弹仓（B 弹药包，攒射感）
   rect(g, 22, 14, 28, 18, 'M');
   hline(g, 22, 28, 13, 'K');
   hline(g, 22, 28, 19, 'K');
@@ -140,9 +180,16 @@ function thorn_pea() {
   set(g, 16, 28, 'D');
   set(g, 17, 28, 'D');
   set(g, 15, 24, 'L'); // 管身受光
-  eyes(g, 14, 4, 1);
-  smile(g, 20);
-  blush(g, 19);
+  // 弹仓（背上两发备弹）
+  rect(g, 9, 10, 11, 13, 'B');
+  rect(g, 13, 10, 15, 13, 'B');
+  hline(g, 9, 11, 9, 'K');
+  hline(g, 13, 15, 9, 'K');
+  set(g, 11, 10, 'L');
+  set(g, 15, 10, 'L');
+  eyes(g, 14, 4, 1, 'aim'); // 侧目瞄准专注脸
+  smile(g, 20, 'closed'); // 抿嘴：蓄势
+  blush(g, 19, false);
   feet(g);
   return g;
 }
@@ -162,15 +209,15 @@ function trifold_arrow() {
     set(g, y0 + 1, cx + 1, 'K');
     set(g, y0 + 2, cx, 'l');
   }
-  eyes(g, 15, 5);
-  smile(g, 19);
+  eyes(g, 15, 5, 0, 'aim');
+  smile(g, 19, 'grin'); // 三连发的张扬笑脸（与冰/火气质三方拉开）
   blush(g, 18);
   feet(g);
   return g;
 }
 function frost_pea() {
   const g = blank();
-  body(g);
+  body(g, 16, 19, 9, 8, 'i', 'W', 'I'); // 冰蓝身：亮冰肤 + 白高光 + 冰主暗部（PvZ 寒冰射手式元素身体化）
   // 冰晶三棱（顶）
   for (const [cx, y0] of [
     [16, 3],
@@ -187,35 +234,52 @@ function frost_pea() {
     set(g, y0 + 3, cx - 1, 'K');
     set(g, y0 + 3, cx + 1, 'K');
   }
-  eyes(g, 15, 5);
-  smile(g, 19);
-  blush(g, 18);
+  // 霜纹（身侧冰花）
+  set(g, 13, 11, 'I');
+  set(g, 14, 10, 'i');
+  set(g, 20, 11, 'I');
+  set(g, 21, 10, 'i');
+  set(g, 13, 21, 'I');
+  set(g, 14, 22, 'i');
+  set(g, 20, 21, 'I');
+  set(g, 21, 22, 'i');
+  eyes(g, 15, 5, 0, 'cool'); // 冷脸：与火豆的咧嘴形成气质对位
+  smile(g, 19, 'closed'); // 严肃抿嘴
+  blush(g, 18, false); // 冰系无腮红（冷感）
   feet(g);
   return g;
 }
 function ember_fluff() {
   const g = blank();
-  body(g);
+  body(g, 16, 19, 9, 8, 'r', 'W', 'R'); // 火橙身：亮火肤 + 白高光 + 火主暗部
   // 火苗（顶）
   for (const [cx, y0] of [
-    [16, 2],
-    [11, 5],
-    [21, 5],
+    [16, 1],
+    [10, 6],
+    [22, 6],
   ]) {
     set(g, y0, cx, 'R');
-    set(g, y0 + 1, cx, 'R');
-    set(g, y0 + 2, cx, 'r');
+    set(g, y0 + 1, cx, 'r');
+    set(g, y0 + 2, cx, 'R');
+    set(g, y0 + 2, cx - 1, 'R');
+    set(g, y0 + 2, cx + 1, 'R');
     set(g, y0 + 3, cx, 'R');
-    set(g, y0 + 3, cx - 1, 'R');
-    set(g, y0 + 3, cx + 1, 'R');
-    set(g, y0 + 4, cx, 'r');
     set(g, y0 - 1, cx, 'K');
-    set(g, y0 + 4, cx - 1, 'K');
-    set(g, y0 + 4, cx + 1, 'K');
+    set(g, y0 + 3, cx - 1, 'K');
+    set(g, y0 + 3, cx + 1, 'K');
   }
+  // 焰纹（身侧小火苗）
+  set(g, 13, 11, 'R');
+  set(g, 12, 10, 'r');
+  set(g, 20, 11, 'R');
+  set(g, 19, 10, 'r');
+  set(g, 13, 21, 'R');
+  set(g, 12, 22, 'r');
+  set(g, 20, 21, 'R');
+  set(g, 19, 22, 'r');
   eyes(g, 15, 5);
-  smile(g, 19);
-  blush(g, 18);
+  smile(g, 19, 'grin'); // 咧嘴大笑：与冰豆冷脸对位
+  blush(g, 18, false);
   feet(g);
   return g;
 }
@@ -266,42 +330,53 @@ function wood_core() {
 }
 function lob_shroom() {
   const g = blank();
-  // 雾菇（抛射）
-  ellipse(g, 16, 12, 10, 6.5, 'K');
-  ellipse(g, 16, 12, 9, 5.5, 'I');
-  rect(g, 11, 9, 13, 11, 'i');
-  rect(g, 20, 9, 22, 11, 'i');
-  set(g, 8, 11, 'I');
-  set(g, 23, 11, 'I');
-  rect(g, 11, 14, 20, 26, 'B');
-  rect(g, 11, 14, 11, 26, 'K');
-  rect(g, 20, 14, 20, 26, 'K');
-  hline(g, 11, 20, 26, 'K');
+  // 扁横大伞盖（rx10×ry4，横向铺展=抛掷手势，与闪电菇高束对位）
+  ellipse(g, 16, 11, 11, 4.5, 'K');
+  ellipse(g, 16, 11, 10, 3.5, 'I');
+  rect(g, 11, 8, 13, 10, 'i');
+  rect(g, 20, 8, 22, 10, 'i');
+  set(g, 7, 11, 'I');
+  set(g, 7, 22, 'I');
+  // 雾汽（帽下飘散）
+  set(g, 15, 6, 'i');
+  set(g, 14, 26, 'i');
+  set(g, 16, 27, 'i');
+  // 柄（加宽防头重脚轻）
+  rect(g, 12, 14, 19, 26, 'B');
+  rect(g, 12, 14, 12, 26, 'K');
+  rect(g, 19, 14, 19, 26, 'K');
+  hline(g, 12, 19, 26, 'K');
   eyes(g, 19, 4);
-  smile(g, 22);
+  smile(g, 22, 'o'); // 呆圆嘴
   blush(g, 21);
   return g;
 }
 function storm_cap() {
   const g = blank();
-  // 闪电菇
-  ellipse(g, 16, 12, 10, 6.5, 'K');
-  ellipse(g, 16, 12, 9, 5.5, 'P');
+  // 高束伞盖（rx7×ry8，尖塔束状=聚雷，与雾菇扁盘对位）
+  ellipse(g, 16, 11, 7, 7, 'K');
+  ellipse(g, 16, 11, 6, 6, 'P');
+  ellipse(g, 16, 9, 3.5, 3, 'Z');
   rect(g, 11, 9, 13, 11, 'Z');
   rect(g, 20, 9, 22, 11, 'Z');
   // 帽顶闪电
+  set(g, 3, 16, 'y');
+  set(g, 4, 16, 'y');
   set(g, 5, 16, 'y');
-  set(g, 6, 16, 'y');
-  set(g, 7, 15, 'y');
+  set(g, 6, 15, 'y');
+  set(g, 7, 16, 'y');
   set(g, 8, 16, 'y');
   set(g, 9, 16, 'y');
-  rect(g, 11, 14, 20, 26, 'B');
-  rect(g, 11, 14, 11, 26, 'K');
-  rect(g, 20, 14, 20, 26, 'K');
-  hline(g, 11, 20, 26, 'K');
-  eyes(g, 19, 4);
-  smile(g, 22);
-  blush(g, 21);
+  // 电斑（身侧电弧）
+  set(g, 17, 15, 'Z');
+  set(g, 18, 16, 'y');
+  rect(g, 13, 14, 18, 26, 'B');
+  rect(g, 13, 14, 13, 26, 'K');
+  rect(g, 18, 14, 18, 26, 'K');
+  hline(g, 13, 18, 26, 'K');
+  eyes(g, 19, 4, 0, 'sharp'); // 怒目脸
+  smile(g, 22, 'closed');
+  blush(g, 21, false);
   return g;
 }
 function tether_moss() {
@@ -332,7 +407,7 @@ function tether_moss() {
 }
 function nectar_moss() {
   const g = blank();
-  // 蜜草（粉冠金芯）
+  // 蜜草（大花冠粉芯金蕊——花仙造型，与雾灯的灯柱对位）
   for (let a = 0; a < 10; a++) {
     const ang = (a / 10) * Math.PI * 2;
     const px = Math.round(16 + Math.cos(ang) * 8);
@@ -343,32 +418,46 @@ function nectar_moss() {
   ellipse(g, 16, 9, 4, 3, 'f');
   ellipse(g, 16, 9, 2.5, 2, 'G');
   set(g, 8, 15, 'W');
-  // 身体
-  body(g, 16, 21, 8, 6, 'M');
-  eyes(g, 20, 4);
-  smile(g, 23);
-  blush(g, 22);
+  // 身体（略小，让花冠成为绝对主体）
+  body(g, 16, 22, 7, 5);
+  eyes(g, 20, 3);
+  smile(g, 23, 'grin'); // 笑脸上扬
+  blush(g, 21, false);
   return g;
 }
 function mist_lamp() {
   const g = blank();
-  // 雾灯（灯笼）
-  rect(g, 15, 6, 16, 12, 'd');
-  rect(g, 10, 3, 21, 10, 'K');
-  rect(g, 11, 4, 20, 9, 'G'); // 暖光灯罩（读作灯而非屏幕）
+  // 雾灯（职能破例：去脸化——灯体即头，物件逻辑）
+  // 底座
+  rect(g, 12, 27, 19, 27, 'N');
+  rect(g, 11, 28, 20, 28, 'n');
+  set(g, 29, 12, 'K');
+  set(g, 29, 19, 'K');
+  // 灯柱
+  rect(g, 14, 16, 17, 26, 'N');
+  rect(g, 14, 14, 17, 14, 'n');
+  set(g, 18, 16, 'n');
+  // 灯笼主体（暖光 G + 灯芯 y + 高光 W）
+  rect(g, 10, 3, 21, 11, 'K');
+  rect(g, 11, 4, 20, 10, 'G');
   rect(g, 12, 5, 15, 8, 'y');
   set(g, 6, 13, 'W'); // 灯芯高光
-  rect(g, 13, 2, 18, 2, 'N');
-  set(g, 3, 12, 'y');
-  set(g, 3, 19, 'y');
-  set(g, 11, 15, 'G'); // 灯芯火
-  set(g, 10, 15, 'y');
-  // 身体
-  body(g, 16, 21, 8, 6);
-  eyes(g, 20, 4);
-  smile(g, 23);
-  blush(g, 22);
-  return g;
+  // 顶梁+提手
+  rect(g, 13, 1, 18, 1, 'N');
+  set(g, 0, 13, 'y');
+  set(g, 0, 18, 'y');
+  set(g, 2, 15, 'y');
+  set(g, 2, 16, 'y');
+  // 驱散之光（职能件：向四周散出）
+  set(g, 12, 6, 'W');
+  set(g, 12, 23, 'W');
+  set(g, 19, 6, 'W');
+  set(g, 19, 23, 'W');
+  set(g, 7, 15, 'y');
+  set(g, 7, 16, 'y');
+  set(g, 24, 15, 'y');
+  set(g, 24, 16, 'y');
+  return g; // 无脸（用户拍板职能破例：灯柱类不做五官）
 }
 
 /** 蒲公英：白绒球（受风将散）+ 絮丝 + 绿茎，职能件置顶（全屏追踪=乘风）。 */
@@ -448,7 +537,7 @@ function emitTable(table) {
 }
 writeFileSync(
   join(root, 'src/data/pixels/units/meadow.ts'),
-  `import type { PixelSprite } from '../palette.ts';\n\n/**\n * 草原 13 单位像素矩阵（32×32，生成器产出，勿手改：改 scripts/gen-pixel-units.mjs）。\n * 设计纪律：白睛黑瞳+瞳内高光、腮红、三阶明暗（K 描边/M 主/L 受光）、职能特征件置顶、内容垂直居中。\n */\nexport const unitSprites: Record<string, PixelSprite> = {\n${emitTable(sprites)}\n};\n`,
+  `import type { PixelSprite } from '../palette.ts';\n\n/**\n * 草原 14 单位像素矩阵（32×32，生成器产出，勿手改：改 scripts/gen-pixel-units.mjs）。\n * 设计纪律：白睛黑瞳+瞳内高光、腮红、三阶明暗（K 描边/M 主/L 受光）、职能特征件置顶、内容垂直居中。\n */\nexport const unitSprites: Record<string, PixelSprite> = {\n${emitTable(sprites)}\n};\n`,
   'utf8',
 );
 console.log('unit sprites regenerated:', Object.keys(sprites).length);
